@@ -1,6 +1,3 @@
-
-
-
 import React, { useState } from 'react';
 import {
   View,
@@ -14,6 +11,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Link, router } from 'expo-router';
 import axios from 'axios';
+import {userApi} from '../../services/api';
 
 export default function SignUp() {
   const [name, setUsername] = useState('');
@@ -30,11 +28,15 @@ export default function SignUp() {
     setLoading(true);
     try {
       console.log("inside signup");
-      const response = await axios.post('http://10.0.2.2:8888/api/v1/users/user', {
-        name,
-        email,
-        password,
-      });
+
+      // const response = await axios.post('http://10.0.2.2:8888/api/v1/users/user', {
+      //   name,
+      //   email,
+      //   password,
+      // });
+
+      const response = await userApi.registerUser({ name, email, password });
+
 
       console.log("after signup");
       

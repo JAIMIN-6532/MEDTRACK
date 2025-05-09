@@ -4,7 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { getOrders } from '../../utils/api';
+import { healthProductApi } from '../../services/healthProductApi';
 // import { useFocusEffect } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 
@@ -21,7 +21,7 @@ export default function Orders() {
     try {
       setLoading(true);
       setError(null);
-      const data = await getOrders();
+      const data = await healthProductApi.getAllHealthProducts();
       setOrders(data);
     } catch (err) {
       setError('Failed to load orders');

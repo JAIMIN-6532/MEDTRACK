@@ -14,7 +14,8 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { PieChart } from "react-native-chart-kit";
 import { router } from "expo-router";
-import { getUserProfile, getMedicineStats, logoutUser } from "../../utils/api";
+// import { getUserProfile, getMedicineStats, logoutUser } from "../../utils/api";
+import { userApi, healthProductApi } from "../../services/api";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 export default function Profile() {
   const [loading, setLoading] = useState(true);
@@ -37,8 +38,8 @@ export default function Profile() {
       console.log(user);
       setUser(user);
       const [statsData] = await Promise.all([
-        // getUserProfile(),
-        getMedicineStats(),
+        userApi.getUserProfile(),
+        // getMedicineStats(),
       ]);
 
       console.log(statsData);
@@ -52,7 +53,7 @@ export default function Profile() {
           legendFontColor: "#64748b",
         };
       });
-  
+
       setMedicineStats(validStats);
     } catch (err) {
       setError("Failed to load profile data");
@@ -64,7 +65,8 @@ export default function Profile() {
 
   const handleLogout = async () => {
     try {
-      await logoutUser();
+      // await logoutUser();
+      await userApi.logoutUser()
       router.replace("/auth/SignIn");
     } catch (error) {
       console.error("Logout failed:", error);

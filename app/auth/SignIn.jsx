@@ -12,7 +12,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Link, router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { loginUser } from '../../utils/api';
+import { userApi } from '../../services/api';
 // import { setupMedicineReminders, configurePushNotifications } from '../../utils/notifications';
 
 export default function SignIn() {
@@ -28,7 +28,7 @@ export default function SignIn() {
 
     setLoading(true);
     try {
-      const response = await loginUser(email, password);
+      const response = await userApi.loginUser(email, password);
       
       // Store user data
       await AsyncStorage.setItem('userData', JSON.stringify({

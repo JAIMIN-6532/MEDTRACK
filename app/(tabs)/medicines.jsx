@@ -7,8 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import moment from 'moment';
-import {logMedicine} from "../../utils/api";
-
+import {logMedicine} from "../../services/api";
 
 export default function MedicinesList() {
   const [medicines, setMedicines] = useState([]);

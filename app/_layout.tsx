@@ -65,7 +65,7 @@ export default function RootLayout() {
         allowAlert: true,
         allowBadge: true,
         allowSound: true,
-        allowAnnouncements: true,
+        // allowAnnouncements: true,
       },
     });
     if (status !== 'granted') {
@@ -80,8 +80,8 @@ export default function RootLayout() {
   return (
     <>
       <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="auth"/>
-        <Stack.Screen name="(tabs)"/>
+        <Stack.Screen name="auth" />
+        <Stack.Screen name="(tabs)" />
         <Stack.Screen name="+not-found" />
       </Stack>
       <StatusBar style="auto" />

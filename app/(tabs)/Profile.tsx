@@ -1,29 +1,39 @@
-
-
-import React, { useState, useEffect } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  Image,
-  TouchableOpacity,
-  ScrollView,
-  Dimensions,
-  ActivityIndicator,
-} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { PieChart } from "react-native-chart-kit";
-import { router } from "expo-router";
-// import { getUserProfile, getMedicineStats, logoutUser } from "../../utils/api";
-import { userApi, healthProductApi } from "../../services/api";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-export default function Profile() {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [profile, setProfile] = useState(null);
-  const [medicineStats, setMedicineStats] = useState([]);
+import { router } from "expo-router";
+import React, { useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  Dimensions,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { PieChart } from "react-native-chart-kit";
+import { medicineLogApi, userApi } from "../../services/api";
 
-  const [user, setUser] = useState(null);
+interface ProfileData {
+  name: string;
+  email: string;
+  photoUrl?: string;
+}
+
+interface MedicineStat {
+  name: string;
+  missedDoses: number;
+  color: string;
+  legendFontColor: string;
+}
+
+const Profile: React.FC = () => {
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [medicineStats, setMedicineStats] = useState<MedicineStat[]>([]);
+  const [user, setUser] = useState<ProfileData | null>(null);
 
   useEffect(() => {
     loadProfileData();
@@ -34,21 +44,22 @@ export default function Profile() {
       setLoading(true);
       setError(null);
       const userData = await AsyncStorage.getItem("userData");
-      const user = JSON.parse(userData);
+      const user: ProfileData = JSON.parse(userData || '{}');
       console.log(user);
       setUser(user);
+
       const [statsData] = await Promise.all([
         userApi.getUserProfile(),
-        // getMedicineStats(),
+        medicineLogApi.getLogsForPastDays(30)
       ]);
 
       console.log(statsData);
 
-      const validStats = statsData.map((stat) => {
-        const missedDoses = parseInt(stat.misCount, 10); // Ensure it's an integer
+      const validStats = (statsData || []).map((stat: any) => {
+        const missedDoses = parseInt(stat.misCount, 10);
         return {
           name: stat.healthProductName,
-          missedDoses: isNaN(missedDoses) ? 0 : missedDoses, // Replace NaN with 0 if invalid
+          missedDoses: isNaN(missedDoses) ? 0 : missedDoses,
           color: getRandomColor(),
           legendFontColor: "#64748b",
         };
@@ -65,15 +76,14 @@ export default function Profile() {
 
   const handleLogout = async () => {
     try {
-      // await logoutUser();
-      await userApi.logoutUser()
+      await userApi.logoutUser();
       router.replace("/auth/SignIn");
     } catch (error) {
       console.error("Logout failed:", error);
     }
   };
 
-  const getRandomColor = () => {
+  const getRandomColor = (): string => {
     const colors = [
       "#6366f1",
       "#8b5cf6",
@@ -141,7 +151,7 @@ export default function Profile() {
             chartConfig={{
               color: (opacity = 1) => `rgba(99, 102, 241, ${opacity})`,
               labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
-              strokeWidth: 20, // Add stroke width to the chart segments
+              strokeWidth: 20,
             }}
             accessor="missedDoses"
             backgroundColor="transparent"
@@ -187,7 +197,7 @@ export default function Profile() {
       </View>
     </ScrollView>
   );
-}
+};
 
 const styles = StyleSheet.create({
   container: {
@@ -332,3 +342,5 @@ const styles = StyleSheet.create({
     color: "#ef4444",
   },
 });
+
+export default Profile;

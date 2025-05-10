@@ -1,21 +1,28 @@
-
-
-
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { healthProductApi } from '../../services/healthProductApi';
-// import { useFocusEffect } from 'expo-router';
+import React, { useState, useCallback } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { healthProductApi } from '../../services/api';
 import { useFocusEffect } from '@react-navigation/native';
 
-export default function Orders() {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [orders, setOrders] = useState([]);
+interface Order {
+  id: string;
+  name: string;
+  quantity: number;
+  createdAt: string;
+  expiryDate: string;
+  status: string;
+}
 
-  useFocusEffect(React.useCallback(() => {
-    loadOrders();
-  }, []));
+export default function Orders() {
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [orders, setOrders] = useState<Order[]>([]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadOrders();
+    }, [])
+  );
 
   const loadOrders = async () => {
     try {
@@ -70,15 +77,6 @@ export default function Orders() {
             <TouchableOpacity key={order.id} style={styles.orderCard}>
               <View style={styles.orderHeader}>
                 <Text style={styles.orderId}>#MTORD{order.id}</Text>
-                {/* <View style={[
-                  styles.statusBadge,
-                  { backgroundColor: order.status === 'Delivered' ? '#dcfce7' : '#fef9c3' }
-                ]}>
-                  <Text style={[
-                    styles.statusText,
-                    { color: order.status === 'Delivered' ? '#16a34a' : '#ca8a04' }
-                  ]}>{order.status}</Text>
-                </View> */}
               </View>
 
               <View style={styles.orderDetails}>
@@ -195,15 +193,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#6366f1',
-  },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '500',
   },
   orderDetails: {
     gap: 8,

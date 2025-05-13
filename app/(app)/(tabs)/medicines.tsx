@@ -3,10 +3,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Notifications from 'expo-notifications';
-import moment from 'moment';
+import { format, isBefore, parseISO } from 'date-fns';
 import React, { useEffect, useState, useCallback } from 'react';
 import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from 'react-native';
-import { healthProductApi, medicineLogApi } from '../../services/api';
+import { healthProductApi, medicineLogApi } from '@/services/api';
 
 type Medicine = {
   name: string;
@@ -143,9 +143,9 @@ export default function MedicinesList() {
             <View className="flex-row items-center ml-4">
               <Ionicons name="calendar" size={16} color="#4B5563" />
               <Text
-                className={`text-sm ml-1 ${moment(item.expiryDate).isBefore(moment()) ? 'text-red-500 font-medium' : 'text-gray-600'}`}
+                className={`text-sm ml-1 ${isBefore(parseISO(item.expiryDate), new Date()) ? 'text-red-500 font-medium' : 'text-gray-600'}`}
               >
-                Exp: {moment(item.expiryDate).format('DD MMM YYYY')}
+                Exp: {format(parseISO(item.expiryDate), 'dd MMM yyyy')}
               </Text>
             </View>
           </View>

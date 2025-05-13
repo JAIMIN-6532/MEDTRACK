@@ -13,7 +13,7 @@ import {
   View,
 } from "react-native";
 import { PieChart } from "react-native-chart-kit";
-import { medicineLogApi, userApi } from "../../services/api";
+import { medicineLogApi, userApi } from "@/services/api";
 
 interface ProfileData {
   name: string;
@@ -77,7 +77,7 @@ const Profile: React.FC = () => {
   const handleLogout = async () => {
     try {
       await userApi.logoutUser();
-      router.replace("/auth/SignIn");
+      router.replace("/auth/sign-in" as any);
     } catch (error) {
       console.error("Logout failed:", error);
     }

@@ -1,3 +1,47 @@
+import axios from 'axios';
+import { showError } from '@/utils/errorHandler';
+
+const api = axios.create({
+  baseURL: 'YOUR_API_BASE_URL',
+  timeout: 10000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Request interceptor
+api.interceptors.request.use(
+  (config) => {
+    // You can add auth token here
+    return config;
+  },
+  (error) => {
+    showError('Network request failed');
+    return Promise.reject(error);
+  }
+);
+
+// Response interceptor
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response) {
+      // The request was made and the server responded with a status code
+      // that falls out of the range of 2xx
+      const errorMessage = error.response.data?.message || 'An error occurred';
+      showError(errorMessage);
+    } else if (error.request) {
+      // The request was made but no response was received
+      showError('No response from server');
+    } else {
+      // Something happened in setting up the request that triggered an Error
+      showError('Request setup failed');
+    }
+    return Promise.reject(error);
+  }
+);
+
+export default api;
 
 // Re-export other API modules
 export * as healthProductApi from './healthProductApi';

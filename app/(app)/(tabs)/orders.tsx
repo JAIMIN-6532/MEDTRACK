@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState, useCallback } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { healthProductApi } from '../../services/api';
+import { healthProductApi } from '@/services/api';
 import { useFocusEffect } from '@react-navigation/native';
 
 interface Order {

@@ -61,7 +61,7 @@ export const loginUser = async (email: string, password: string): Promise<LoginR
     try {
         const res = await api.post<LoginResponse>('/user/signin', { email, password });
         const { token, user } = res.data;
-
+        console.log('Login response:', res.data);
         await SecureStore.setItemAsync('accessToken', token);
         await AsyncStorage.setItem('userData', JSON.stringify(user));
 

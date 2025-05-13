@@ -1,13 +1,12 @@
-
-import { Redirect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Redirect } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { View, ActivityIndicator } from 'react-native';
-import * as Notifications from 'expo-notifications';
+import { ActivityIndicator, View } from 'react-native';
 
 export default function Index() {
   const [isLoading, setIsLoading] = useState(true);
-  const [initialRoute, setInitialRoute] = useState(null);
+  const [initialRoute, setInitialRoute] = useState<string | null>(null);
+
   useEffect(() => {
     checkAuthStatus();
   }, []);
@@ -15,8 +14,10 @@ export default function Index() {
   const checkAuthStatus = async () => {
     try {
       const userData = await AsyncStorage.getItem('userData');
-      setInitialRoute(userData ? '/(tabs)/medicines' : '/auth/SignIn');
+      // Update path based on new folder structure
+      setInitialRoute(userData ? '/(app)/(tabs)/medicines' : '/auth/SignIn');
     } catch (error) {
+      console.error('Error checking auth status:', error);
       setInitialRoute('/auth/SignIn');
     } finally {
       setIsLoading(false);
@@ -25,11 +26,15 @@ export default function Index() {
 
   if (isLoading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+      <View className="flex-1 justify-center items-center">
         <ActivityIndicator size="large" color="#192f6a" />
       </View>
     );
   }
+  if (!initialRoute) {
+    return null;
+  }
 
-  return <Redirect href={initialRoute} />;
+  return <Redirect href={{ pathname: initialRoute as any, params: {} }} />;
+
 }

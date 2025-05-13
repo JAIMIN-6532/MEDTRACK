@@ -12,7 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { healthProductApi } from '../../services/api';
+import { healthProductApi } from '@/services/api';
 
 interface Medicine {
   id: string;
@@ -111,7 +111,6 @@ const AddMedicine: React.FC = () => {
                   categoryIdentifier: "MEDICINE_REMINDER",
                 },
                 trigger: {
-                  type: Notifications.SchedulableTriggerInputTypes.DAILY,
                   hour: parseInt(hours),
                   minute: parseInt(minutes),
                   repeats: true,
@@ -128,7 +127,7 @@ const AddMedicine: React.FC = () => {
           );
         }
         Alert.alert("Success", "Medicine added successfully");
-        router.push("/medicines");
+        router.push("/medicines" as any);
       } else {
         Alert.alert("Error", "Failed to add medicine");
       }

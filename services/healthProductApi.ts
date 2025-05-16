@@ -6,6 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 export const createHealthProduct = async (healthProductDto: any) => {
     try {
         const res = await api.post('/health-product/createHealthProduct', healthProductDto);
+        console.log('Health product created:', res.data);
         return res.data;
     } catch (error: unknown) {
         if (error instanceof AxiosError) {

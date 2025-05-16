@@ -1,8 +1,8 @@
-import { Ionicons } from '@expo/vector-icons';
-import React, { useState, useCallback } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { healthProductApi } from '@/services/api';
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+import React, { useCallback, useState } from 'react';
+import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 
 interface Order {
   id: string;
@@ -14,33 +14,37 @@ interface Order {
 }
 
 export default function Orders() {
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
 
-  useFocusEffect(
-    useCallback(() => {
-      loadOrders();
-    }, [])
-  );
-
-  const loadOrders = async () => {
+  const loadOrders = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
       const data = await healthProductApi.getAllHealthProducts();
-      setOrders(data);
+      if (Array.isArray(data)) {
+        setOrders(data);
+      } else {
+        throw new Error('Invalid data format');
+      }
     } catch (err) {
       setError('Failed to load orders');
       console.error(err);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadOrders();
+    }, [loadOrders])
+  );
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
+      <View className="flex-1 justify-center items-center bg-slate-50">
         <ActivityIndicator size="large" color="#6366f1" />
       </View>
     );
@@ -48,50 +52,61 @@ export default function Orders() {
 
   if (error) {
     return (
-      <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={loadOrders}>
-          <Text style={styles.retryButtonText}>Retry</Text>
+      <View className="flex-1 justify-center items-center bg-slate-50 p-6">
+        <Text className="text-red-500 text-base text-center mb-4">{error}</Text>
+        <TouchableOpacity onPress={loadOrders} className="bg-indigo-500 px-5 py-2 rounded-lg">
+          <Text className="text-white font-semibold text-base">Retry</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>My Orders</Text>
-        <TouchableOpacity style={styles.filterButton}>
+    <View className="flex-1 bg-slate-50 pt-8">
+      {/* Header */}
+      <View className="flex-row justify-between items-center px-4 py-4 bg-white border-b border-gray-200">
+        <Text className="text-xl font-semibold text-slate-800">My Orders</Text>
+        <TouchableOpacity className="p-2">
           <Ionicons name="filter" size={24} color="#6366f1" />
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.ordersList}>
+      {/* Orders List */}
+      <ScrollView className="px-4">
         {orders.length === 0 ? (
-          <View style={styles.noOrdersContainer}>
+          <View className="items-center justify-center py-16">
             <Ionicons name="cart-outline" size={48} color="#64748b" />
-            <Text style={styles.noOrdersText}>No orders found</Text>
+            <Text className="text-base text-slate-500 mt-3">No orders found</Text>
           </View>
         ) : (
           orders.map((order) => (
-            <TouchableOpacity key={order.id} style={styles.orderCard}>
-              <View style={styles.orderHeader}>
-                <Text style={styles.orderId}>#MTORD{order.id}</Text>
+            <TouchableOpacity key={order.id} className="bg-white rounded-xl p-4 mb-4 shadow-sm">
+              <View className="flex-row justify-between items-center mb-3">
+                <Text className="text-indigo-500 font-semibold text-base">
+                  #MTORD{order.id}
+                </Text>
               </View>
 
-              <View style={styles.orderDetails}>
-                <Text style={styles.medicineName}>{order.name}</Text>
-                <View style={styles.detailRow}>
+              <View className="space-y-2">
+                <Text className="text-lg font-semibold text-slate-800">{order.name}</Text>
+
+                <View className="flex-row items-center space-x-2">
                   <Ionicons name="cube-outline" size={16} color="#64748b" />
-                  <Text style={styles.detailText}>Quantity: {order.quantity}</Text>
+                  <Text className="text-sm text-slate-500">Quantity: {order.quantity}</Text>
                 </View>
-                <View style={styles.detailRow}>
+
+                <View className="flex-row items-center space-x-2">
                   <Ionicons name="calendar-outline" size={16} color="#64748b" />
-                  <Text style={styles.detailText}>Ordered: {order.createdAt.split(' ')[0]}</Text>
+                  <Text className="text-sm text-slate-500">
+                    Ordered: {new Date(order.createdAt).toLocaleDateString()}
+                  </Text>
                 </View>
-                <View style={styles.detailRow}>
+
+                <View className="flex-row items-center space-x-2">
                   <Ionicons name="alert-circle-outline" size={16} color="#64748b" />
-                  <Text style={styles.detailText}>Expires: {order.expiryDate}</Text>
+                  <Text className="text-sm text-slate-500">
+                    Expires: {new Date(order.expiryDate).toLocaleDateString()}
+                  </Text>
                 </View>
               </View>
             </TouchableOpacity>
@@ -101,115 +116,3 @@ export default function Orders() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f8fafc',
-    paddingTop: 30,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f8fafc',
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f8fafc',
-    padding: 20,
-  },
-  errorText: {
-    color: '#ef4444',
-    fontSize: 16,
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  retryButton: {
-    backgroundColor: '#6366f1',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  noOrdersContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 40,
-  },
-  noOrdersText: {
-    fontSize: 16,
-    color: '#64748b',
-    marginTop: 12,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e5e5',
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: '#1e293b',
-  },
-  filterButton: {
-    padding: 8,
-  },
-  ordersList: {
-    padding: 16,
-  },
-  orderCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
-  },
-  orderHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  orderId: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#6366f1',
-  },
-  orderDetails: {
-    gap: 8,
-  },
-  medicineName: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1e293b',
-    marginBottom: 4,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  detailText: {
-    fontSize: 14,
-    color: '#64748b',
-  },
-});

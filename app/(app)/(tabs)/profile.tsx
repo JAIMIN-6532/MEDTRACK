@@ -7,13 +7,12 @@ import {
   Dimensions,
   Image,
   ScrollView,
-  StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
 import { PieChart } from "react-native-chart-kit";
-import { medicineLogApi, userApi } from "@/services/api";
+import { userApi, medicineLogApi } from "@/services/api";
 
 interface ProfileData {
   name: string;
@@ -29,11 +28,10 @@ interface MedicineStat {
 }
 
 const Profile: React.FC = () => {
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [profile, setProfile] = useState<ProfileData | null>(null);
-  const [medicineStats, setMedicineStats] = useState<MedicineStat[]>([]);
   const [user, setUser] = useState<ProfileData | null>(null);
+  const [medicineStats, setMedicineStats] = useState<MedicineStat[]>([]);
 
   useEffect(() => {
     loadProfileData();
@@ -43,32 +41,35 @@ const Profile: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      const userData = await AsyncStorage.getItem("userData");
-      const user: ProfileData = JSON.parse(userData || '{}');
-      console.log(user);
-      setUser(user);
 
-      const [statsData] = await Promise.all([
+      const userData = await AsyncStorage.getItem("userData");
+      if (!userData) throw new Error("User not found");
+
+      const parsedUser = JSON.parse(userData);
+      setUser(parsedUser);
+
+      const [_, logsResponse] = await Promise.all([
         userApi.getUserProfile(),
-        medicineLogApi.getLogsForPastDays(30)
+        medicineLogApi.getLogsForPastDays(30),
       ]);
 
-      console.log(statsData);
+      const logsArray = Array.isArray(logsResponse?.data)
+        ? logsResponse.data
+        : Array.isArray(logsResponse)
+          ? logsResponse
+          : [];
 
-      const validStats = (statsData || []).map((stat: any) => {
-        const missedDoses = parseInt(stat.misCount, 10);
-        return {
-          name: stat.healthProductName,
-          missedDoses: isNaN(missedDoses) ? 0 : missedDoses,
-          color: getRandomColor(),
-          legendFontColor: "#64748b",
-        };
-      });
+      const formattedStats = logsArray.map((stat: any) => ({
+        name: stat.healthProductName,
+        missedDoses: parseInt(stat.misCount, 10) || 0,
+        color: getRandomColor(),
+        legendFontColor: "#64748b",
+      }));
 
-      setMedicineStats(validStats);
+      setMedicineStats(formattedStats);
     } catch (err) {
-      setError("Failed to load profile data");
       console.error(err);
+      setError("Failed to load profile data.");
     } finally {
       setLoading(false);
     }
@@ -77,9 +78,10 @@ const Profile: React.FC = () => {
   const handleLogout = async () => {
     try {
       await userApi.logoutUser();
-      router.replace("/auth/sign-in" as any);
-    } catch (error) {
-      console.error("Logout failed:", error);
+      await AsyncStorage.clear();
+      router.replace("/auth/SignIn");
+    } catch (err) {
+      console.error("Logout failed:", err);
     }
   };
 
@@ -97,7 +99,7 @@ const Profile: React.FC = () => {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
+      <View className="flex-1 items-center justify-center bg-slate-50">
         <ActivityIndicator size="large" color="#6366f1" />
       </View>
     );
@@ -105,45 +107,53 @@ const Profile: React.FC = () => {
 
   if (error) {
     return (
-      <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={loadProfileData}>
-          <Text style={styles.retryButtonText}>Retry</Text>
+      <View className="flex-1 items-center justify-center bg-slate-50 px-4">
+        <Text className="text-red-500 text-lg mb-4">{error}</Text>
+        <TouchableOpacity
+          className="bg-indigo-500 px-6 py-2 rounded-lg"
+          onPress={loadProfileData}
+        >
+          <Text className="text-white font-semibold">Retry</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.profileInfo}>
+    <ScrollView className="flex-1 bg-slate-50 mt-12">
+      {/* Header */}
+      <View className="flex-row items-center justify-between p-4 bg-white border-b border-gray-200">
+        <View className="flex-row items-center space-x-4">
           <Image
             source={{
               uri:
-                profile?.photoUrl ||
+                user?.photoUrl ||
                 "https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=200&auto=format&fit=crop",
             }}
-            style={styles.profilePhoto}
+            className="w-20 h-20 rounded-full border-4 border-indigo-500"
           />
-          <View style={styles.nameContainer}>
-            <Text style={styles.name}>{user?.name}</Text>
-            <Text style={styles.email}>{user?.email}</Text>
+          <View>
+            <Text className="text-xl font-semibold text-slate-800">
+              {user?.name}
+            </Text>
+            <Text className="text-base text-slate-500">{user?.email}</Text>
           </View>
         </View>
 
-        <TouchableOpacity style={styles.editButton}>
+        <TouchableOpacity className="p-2 bg-indigo-50 rounded-lg">
           <Ionicons name="pencil" size={20} color="#6366f1" />
         </TouchableOpacity>
       </View>
 
+      {/* Pie Chart */}
       {medicineStats.length > 0 ? (
-        <View style={styles.statsContainer}>
-          <Text style={styles.sectionTitle}>Missed Medicine Statistics</Text>
-          <Text style={styles.subtitle}>
+        <View className="bg-white mx-4 mt-4 p-4 rounded-2xl shadow">
+          <Text className="text-lg font-semibold text-slate-800 mb-1">
+            Missed Medicine Statistics
+          </Text>
+          <Text className="text-sm text-slate-500 mb-3">
             Percentage of missed doses by medicine
           </Text>
-
           <PieChart
             data={medicineStats}
             width={Dimensions.get("window").width - 32}
@@ -151,196 +161,53 @@ const Profile: React.FC = () => {
             chartConfig={{
               color: (opacity = 1) => `rgba(99, 102, 241, ${opacity})`,
               labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
-              strokeWidth: 20,
+              strokeWidth: 2,
             }}
             accessor="missedDoses"
             backgroundColor="transparent"
             paddingLeft="15"
             absolute={false}
-            style={styles.chart}
+            style={{ borderRadius: 16 }}
           />
         </View>
       ) : (
-        <View style={styles.noStatsContainer}>
-          <Text style={styles.noStatsText}>
+        <View className="bg-white mx-4 mt-4 p-6 rounded-2xl items-center justify-center h-52">
+          <Text className="text-slate-500 text-base">
             No medicine statistics available
           </Text>
         </View>
       )}
 
-      <View style={styles.menuContainer}>
-        <TouchableOpacity style={styles.menuItem}>
-          <Ionicons name="notifications-outline" size={24} color="#64748b" />
-          <Text style={styles.menuText}>Notifications</Text>
-          <Ionicons name="chevron-forward" size={24} color="#64748b" />
-        </TouchableOpacity>
+      {/* Menu */}
+      <View className="p-4 space-y-2">
+        {[
+          { label: "Notifications", icon: "notifications-outline" },
+          { label: "Settings", icon: "settings-outline" },
+          { label: "Help & Support", icon: "help-circle-outline" },
+        ].map((item, idx) => (
+          <TouchableOpacity
+            key={idx}
+            className="flex-row items-center bg-white p-4 rounded-2xl"
+          >
+            <Ionicons name={item.icon as any} size={24} color="#64748b" />
+            <Text className="text-base text-slate-800 flex-1 ml-3">
+              {item.label}
+            </Text>
+            <Ionicons name="chevron-forward" size={24} color="#64748b" />
+          </TouchableOpacity>
+        ))}
 
-        <TouchableOpacity style={styles.menuItem}>
-          <Ionicons name="settings-outline" size={24} color="#64748b" />
-          <Text style={styles.menuText}>Settings</Text>
-          <Ionicons name="chevron-forward" size={24} color="#64748b" />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.menuItem}>
-          <Ionicons name="help-circle-outline" size={24} color="#64748b" />
-          <Text style={styles.menuText}>Help & Support</Text>
-          <Ionicons name="chevron-forward" size={24} color="#64748b" />
-        </TouchableOpacity>
-
+        {/* Logout */}
         <TouchableOpacity
-          style={[styles.menuItem, styles.logoutButton]}
           onPress={handleLogout}
+          className="flex-row items-center bg-white p-4 rounded-2xl mt-2"
         >
           <Ionicons name="log-out-outline" size={24} color="#ef4444" />
-          <Text style={[styles.menuText, styles.logoutText]}>Logout</Text>
+          <Text className="text-base text-red-500 flex-1 ml-3">Logout</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f8fafc",
-    marginTop: 50,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#f8fafc",
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#f8fafc",
-    padding: 20,
-  },
-  errorText: {
-    color: "#ef4444",
-    fontSize: 16,
-    marginBottom: 20,
-    textAlign: "center",
-  },
-  retryButton: {
-    backgroundColor: "#6366f1",
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 16,
-    backgroundColor: "#ffffff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#e5e5e5",
-  },
-  profileInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 16,
-  },
-  profilePhoto: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    borderWidth: 3,
-    borderColor: "#6366f1",
-  },
-  nameContainer: {
-    gap: 4,
-  },
-  name: {
-    fontSize: 24,
-    fontWeight: "600",
-    color: "#1e293b",
-  },
-  email: {
-    fontSize: 16,
-    marginLeft: 2,
-    color: "#64741b",
-  },
-  editButton: {
-    padding: 8,
-    backgroundColor: "#eff6ff",
-    borderRadius: 8,
-  },
-  statsContainer: {
-    padding: 16,
-    backgroundColor: "#ffffff",
-    marginTop: 16,
-    borderRadius: 12,
-    marginHorizontal: 16,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
-  },
-  noStatsContainer: {
-    padding: 16,
-    backgroundColor: "#ffffff",
-    marginTop: 16,
-    borderRadius: 12,
-    marginHorizontal: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    height: 200,
-  },
-  noStatsText: {
-    fontSize: 16,
-    color: "#64748b",
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#1e293b",
-    marginBottom: 4,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: "#64748b",
-    marginBottom: 16,
-  },
-  chart: {
-    marginVertical: 8,
-    borderRadius: 16,
-  },
-  menuContainer: {
-    padding: 16,
-    gap: 8,
-  },
-  menuItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#ffffff",
-    padding: 16,
-    borderRadius: 12,
-    gap: 12,
-  },
-  menuText: {
-    fontSize: 16,
-    color: "#1e293b",
-    flex: 1,
-  },
-  logoutButton: {
-    marginTop: 8,
-  },
-  logoutText: {
-    color: "#ef4444",
-  },
-});
 
 export default Profile;

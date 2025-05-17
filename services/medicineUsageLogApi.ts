@@ -1,16 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { LogData, MedicineLogResponse } from '../types/medicineUsageLogTypes';
 import api from '../utils/axiosInstance';
+import { handleApiError } from '../utils/handleApiError';
 
-interface LogData {
-    userId: string;
-    healthProductId: string;
-    isTaken: boolean;
-    medicationScheduleIds: string;
-}
-
-interface MedicineLogResponse {
-    data: any;
-}
 
 // Fetch logs for past days
 export const getLogsForPastDays = async (days: number): Promise<MedicineLogResponse> => {
@@ -18,11 +10,10 @@ export const getLogsForPastDays = async (days: number): Promise<MedicineLogRespo
         const userData = await AsyncStorage.getItem('userData');
         if (!userData) throw new Error('User data not found');
         const { id } = JSON.parse(userData);
-        const res = await api.get(`/medicine-logs/${id}/time/${days}`);
-        return res.data; // Returns the logs data for the specified number of past days
+        const res = await api.get<MedicineLogResponse>(`/medicine-logs/${id}/time/${days}`);
+        return res.data;
     } catch (error: any) {
-        // Handle any errors here
-        console.error('Error fetching logs for past days:', error.message || error);
+        handleApiError(error);
         throw error?.response?.data || error.message || 'An error occurred while fetching logs';
     }
 };
@@ -31,10 +22,9 @@ export const getLogsForPastDays = async (days: number): Promise<MedicineLogRespo
 export const addMedicineUsageLog = async (logData: LogData): Promise<boolean> => {
     try {
         const res = await api.post('/medicine-logs/log', logData);
-        return res.status === 201; // Check if the response status is 201 (created)
+        return res.status === 201;
     } catch (error: any) {
-        // Handle any errors here
-        console.error('Error adding medicine usage log:', error.message || error);
+        handleApiError(error);
         throw error?.response?.data || error.message || 'An error occurred while adding the log';
     }
 };
@@ -45,11 +35,10 @@ export const getTodayLogs = async (): Promise<MedicineLogResponse> => {
         const userData = await AsyncStorage.getItem('userData');
         if (!userData) throw new Error('User data not found');
         const { id } = JSON.parse(userData);
-        const res = await api.get(`/medicine-logs/${id}/today`);
-        return res.data; // Returns today's logs for the logged-in user
+        const res = await api.get<MedicineLogResponse>(`/medicine-logs/${id}/today`);
+        return res.data;
     } catch (error: any) {
-        // Handle any errors here
-        console.error('Error fetching today\'s logs:', error.message || error);
+        handleApiError(error);
         throw error?.response?.data || error.message || 'An error occurred while fetching today\'s logs';
     }
 };

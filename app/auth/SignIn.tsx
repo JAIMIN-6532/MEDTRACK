@@ -61,9 +61,10 @@ export default function SignIn() {
         setLoading(true);
         try {
             const response = await userApi.loginUser(email, password);
-            if (response && response.user && 'id' in response.user && 'email' in response.user) {
+            console.log("response", response);
+            if (response && response.user && 'userId' in response.user && 'email' in response.user) {
                 await AsyncStorage.setItem('userData', JSON.stringify({
-                    id: response.user.id,
+                    id: response.user.userId,
                     email: response.user.email
                 }));
                 router.replace('/(tabs)/medicines' as any);

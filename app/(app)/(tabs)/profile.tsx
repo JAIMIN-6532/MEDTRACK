@@ -53,8 +53,8 @@ const Profile: React.FC = () => {
         medicineLogApi.getLogsForPastDays(30),
       ]);
 
-      const logsArray = Array.isArray(logsResponse?.data)
-        ? logsResponse.data
+      const logsArray = Array.isArray(logsResponse)
+        ? logsResponse
         : Array.isArray(logsResponse)
           ? logsResponse
           : [];

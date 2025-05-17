@@ -4,19 +4,12 @@ import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 
-interface Order {
-  id: string;
-  name: string;
-  quantity: number;
-  createdAt: string;
-  expiryDate: string;
-  status: string;
-}
+import { HealthProductResponseDto } from '@/types/healthProductTypes';
 
 export default function Orders() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [orders, setOrders] = useState<HealthProductResponseDto[]>([]);
 
   const loadOrders = useCallback(async () => {
     try {
@@ -80,19 +73,19 @@ export default function Orders() {
           </View>
         ) : (
           orders.map((order) => (
-            <TouchableOpacity key={order.id} className="bg-white rounded-xl p-4 mb-4 shadow-sm">
+            <TouchableOpacity key={order.healthProductId} className="bg-white rounded-xl p-4 mb-4 shadow-sm">
               <View className="flex-row justify-between items-center mb-3">
                 <Text className="text-indigo-500 font-semibold text-base">
-                  #MTORD{order.id}
+                  #MTORD{order.healthProductId}
                 </Text>
               </View>
 
               <View className="space-y-2">
-                <Text className="text-lg font-semibold text-slate-800">{order.name}</Text>
+                <Text className="text-lg font-semibold text-slate-800">{order.healthProductName}</Text>
 
                 <View className="flex-row items-center space-x-2">
                   <Ionicons name="cube-outline" size={16} color="#64748b" />
-                  <Text className="text-sm text-slate-500">Quantity: {order.quantity}</Text>
+                  <Text className="text-sm text-slate-500">Quantity: {order.availableQuantity}</Text>
                 </View>
 
                 <View className="flex-row items-center space-x-2">

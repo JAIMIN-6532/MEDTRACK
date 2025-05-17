@@ -1,114 +1,107 @@
-import { AxiosError } from 'axios';
-import api from '../utils/axiosInstance';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+    HealthProductRequestDto,
+    HealthProductResponseDto,
+} from '../types/healthProductTypes';
+import api from '../utils/axiosInstance';
+import { handleApiError } from '../utils/handleApiError';
 
-// Create a health product
-export const createHealthProduct = async (healthProductDto: any) => {
+// Create
+export const createHealthProduct = async (
+    dto: HealthProductRequestDto
+): Promise<HealthProductResponseDto> => {
     try {
-        const res = await api.post('/health-product/createHealthProduct', healthProductDto);
-        console.log('Health product created:', res.data);
+        const res = await api.post<HealthProductResponseDto>('/health-product/createHealthProduct', dto);
         return res.data;
-    } catch (error: unknown) {
-        if (error instanceof AxiosError) {
-            throw error.response?.data || error.message;
-        }
-        throw new Error('An unexpected error occurred while creating the health product');
+    } catch (error) {
+        handleApiError(error);
+        throw error;
     }
 };
 
-// Update a health product
-export const updateHealthProduct = async (id: string, dto: any) => {
+// Update
+export const updateHealthProduct = async (
+    id: string,
+    dto: HealthProductRequestDto
+): Promise<HealthProductResponseDto> => {
     try {
-        const res = await api.put(`/health-product/${id}`, dto);
+        const res = await api.put<HealthProductResponseDto>(`/health-product/${id}`, dto);
         return res.data;
-    } catch (error: unknown) {
-        if (error instanceof AxiosError) {
-            throw error.response?.data || error.message;
-        }
-        throw new Error('An unexpected error occurred while updating the health product');
+    } catch (error) {
+        handleApiError(error);
+        throw error;
     }
 };
 
-// Delete a health product
-export const deleteHealthProduct = async (id: string) => {
+// Delete
+export const deleteHealthProduct = async (id: string): Promise<void> => {
     try {
-        const res = await api.delete(`/health-product/${id}`);
-        return res.data;
-    } catch (error: unknown) {
-        if (error instanceof AxiosError) {
-            throw error.response?.data || error.message;
-        }
-        throw new Error('An unexpected error occurred while deleting the health product');
+        await api.delete(`/health-product/${id}`);
+    } catch (error) {
+        handleApiError(error);
     }
 };
 
-// Get a single health product by ID
-export const getHealthProductById = async (id: string) => {
+// Get HealthProduct by ID
+export const getHealthProductById = async (id: string): Promise<HealthProductResponseDto> => {
     try {
-        const res = await api.get(`/health-product/${id}`);
+        const res = await api.get<HealthProductResponseDto>(`/health-product/${id}`);
         return res.data;
-    } catch (error: unknown) {
-        if (error instanceof AxiosError) {
-            throw error.response?.data || error.message;
-        }
-        throw new Error('An unexpected error occurred while fetching the health product');
+    } catch (error) {
+        handleApiError(error);
+        throw error;
     }
 };
 
-// Get active health products for a user
-export const getActiveHealthProducts = async () => {
+// Helper to get user ID from AsyncStorage
+const getUserId = async (): Promise<string> => {
+    const userData = await AsyncStorage.getItem('userData');
+    const parsed = JSON.parse(userData || '{}');
+    if (!parsed.id) throw new Error('User not found in storage');
+    return parsed.id;
+};
+
+// Get active
+export const getActiveHealthProducts = async (): Promise<HealthProductResponseDto[]> => {
     try {
-        const userData = await AsyncStorage.getItem('userData');
-        const { id: userId } = JSON.parse(userData || '{}');
-        const res = await api.get(`/health-product/user/${userId}`);
+        const userId = await getUserId();
+        const res = await api.get<HealthProductResponseDto[]>(`/health-product/user/${userId}`);
         return res.data;
-    } catch (error: unknown) {
-        if (error instanceof AxiosError) {
-            throw error.response?.data || error.message;
-        }
-        throw new Error('An unexpected error occurred while fetching active health products');
+    } catch (error) {
+        handleApiError(error);
+        throw error;
     }
 };
 
-// Get all health products for a user
-export const getAllHealthProducts = async () => {
+// Get all
+export const getAllHealthProducts = async (): Promise<HealthProductResponseDto[]> => {
     try {
-        const userData = await AsyncStorage.getItem('userData');
-        const { id: userId } = JSON.parse(userData || '{}');
-        const res = await api.get(`/health-product/user/${userId}/all`);
+        const userId = await getUserId();
+        const res = await api.get<HealthProductResponseDto[]>(`/health-product/user/${userId}/all`);
         return res.data;
-    } catch (error: unknown) {
-        if (error instanceof AxiosError) {
-            throw error.response?.data || error.message;
-        }
-        throw new Error('An unexpected error occurred while fetching all health products');
+    } catch (error) {
+        handleApiError(error);
+        throw error;
     }
 };
 
-// Get low stock health products for a user
-export const getLowStockHealthProducts = async () => {
+// Get low stock
+export const getLowStockHealthProducts = async (): Promise<HealthProductResponseDto[]> => {
     try {
-        const userData = await AsyncStorage.getItem('userData');
-        const { id: userId } = JSON.parse(userData || '{}');
-        const res = await api.get(`/health-product/user/${userId}/low-stock`);
+        const userId = await getUserId();
+        const res = await api.get<HealthProductResponseDto[]>(`/health-product/user/${userId}/low-stock`);
         return res.data;
-    } catch (error: unknown) {
-        if (error instanceof AxiosError) {
-            throw error.response?.data || error.message;
-        }
-        throw new Error('An unexpected error occurred while fetching low stock health products');
+    } catch (error) {
+        handleApiError(error);
+        throw error;
     }
 };
 
-// Record medicine usage for a product
-export const recordMedicineUsage = async (id: string) => {
+// Record usage
+export const recordMedicineUsage = async (id: string): Promise<void> => {
     try {
-        const res = await api.post(`/health-product/${id}/record-usage`);
-        return res.data;
-    } catch (error: unknown) {
-        if (error instanceof AxiosError) {
-            throw error.response?.data || error.message;
-        }
-        throw new Error('An unexpected error occurred while recording medicine usage');
+        await api.post(`/health-product/${id}/record-usage`);
+    } catch (error) {
+        handleApiError(error);
     }
 };

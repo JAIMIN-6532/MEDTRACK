@@ -1,7 +1,9 @@
+import { Ionicons } from '@expo/vector-icons'; // Import Ionicons from Vector Icons
 import { LinearGradient } from 'expo-linear-gradient';
 import { Link, router } from 'expo-router';
 import { useState } from 'react';
 import {
+    ActivityIndicator,
     Alert,
     Image,
     KeyboardAvoidingView,
@@ -10,14 +12,12 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
-    View,
-    ActivityIndicator
+    View
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons'; // Import Ionicons from Vector Icons
 import { userApi } from '../../services/api';
 
 const SignUp = () => {
-    const [name, setUsername] = useState<string>('');
+    const [fullName, setFullName] = useState<string>('');
     const [email, setEmail] = useState<string>('');
     const [password, setPassword] = useState<string>('');
     const [loading, setLoading] = useState<boolean>(false);
@@ -29,10 +29,10 @@ const SignUp = () => {
     const validateInputs = (): boolean => {
         let isValid = true;
 
-        if (!name) {
+        if (!fullName) {
             setNameError('Username is required');
             isValid = false;
-        } else if (name.length < 3) {
+        } else if (fullName.length < 3) {
             setNameError('Username must be at least 3 characters');
             isValid = false;
         } else {
@@ -67,7 +67,7 @@ const SignUp = () => {
 
         setLoading(true);
         try {
-            const response = await userApi.registerUser({ name, email, password });
+            const response = await userApi.registerUser({ fullName, email, password });
 
             Alert.alert(
                 'Account Created',
@@ -128,9 +128,9 @@ const SignUp = () => {
                         `}
                                         placeholder="Enter your username"
                                         placeholderTextColor="#94a3b8"
-                                        value={name}
+                                        value={fullName}
                                         onChangeText={(text) => {
-                                            setUsername(text);
+                                            setFullName(text);
                                             if (nameError) setNameError('');
                                         }}
                                         autoCapitalize="none"

@@ -1,10 +1,10 @@
 import { healthProductApi } from '@/services/api';
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import DateTimePicker, { DateTimePickerEvent } from "@react-native-community/datetimepicker";
+import { notificationService } from '@/services/notificationService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
-import * as Notifications from "expo-notifications";
-import { router } from "expo-router";
-import React, { useState } from "react";
+import { router } from 'expo-router';
+import React, { useState } from 'react';
 import {
   Alert,
   Platform,
@@ -13,9 +13,11 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-} from "react-native";
+} from 'react-native';
 
-interface Medicine {
+import { HealthProductRequestDto } from '@/types/healthProductTypes';
+
+interface MedicineLocalStorage {
   id: string;
   userId: string;
   name: string;
@@ -23,133 +25,109 @@ interface Medicine {
   availableQuantity: number;
   thresholdQuantity: number;
   doseQuantity: number;
-  unit: string
+  unit: string;
   expiryDate: string;
   doseTimes: string[];
 }
 
-interface ApiResponse {
-  status: number;
-  id: string;
-  data: {
-    medicationSchedules: string[];
-  };
-}
-
 const AddMedicine: React.FC = () => {
-  const [medicineName, setMedicineName] = useState<string>("");
-  const [totalQuantity, setTotalQuantity] = useState<string>("");
-  const [thresholdQuantity, setThresholdQuantity] = useState<string>("");
-  const [doseQuantity, setDoesQuantity] = useState<string>("");
-  const [unit, setUnit] = useState<string>("");
-  const [expiryDate, setExpiryDate] = useState<Date>(new Date());
-  const [doseTimes, setDoseTimes] = useState<string[]>([""]);
-  const [showDatePicker, setShowDatePicker] = useState<boolean>(false);
-  const [showTimePicker, setShowTimePicker] = useState<boolean>(false);
-  const [currentTimeIndex, setCurrentTimeIndex] = useState<number>(0);
+  const [medicineName, setMedicineName] = useState('');
+  const [totalQuantity, setTotalQuantity] = useState('');
+  const [thresholdQuantity, setThresholdQuantity] = useState('');
+  const [doseQuantity, setDoseQuantity] = useState('');
+  const [unit, setUnit] = useState('');
+  const [expiryDate, setExpiryDate] = useState(new Date());
+  const [doseTimes, setDoseTimes] = useState<string[]>(['']);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [currentTimeIndex, setCurrentTimeIndex] = useState(0);
 
-  const handleAddDoseTime = (): void => {
-    setDoseTimes([...doseTimes, ""]);
+  const handleAddDoseTime = () => setDoseTimes([...doseTimes, '']);
+
+  const handleRemoveDoseTime = (index: number) => {
+    const updated = [...doseTimes];
+    updated.splice(index, 1);
+    setDoseTimes(updated);
   };
 
-  const handleRemoveDoseTime = (index: number): void => {
-    // Create a new array excluding the item at the provided index
-    const updatedDoseTimes = [...doseTimes];
-    updatedDoseTimes.splice(index, 1); // Remove 1 item at the specified index
-    setDoseTimes(updatedDoseTimes); // Update the state
-  };
-
-  const handleTimeChange = (event: DateTimePickerEvent, selectedTime?: Date): void => {
+  const handleTimeChange = (_: DateTimePickerEvent, selectedTime?: Date) => {
     setShowTimePicker(false);
     if (selectedTime) {
-      const timeString = selectedTime.toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
+      const timeString = selectedTime.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
         hour12: false,
       });
-      const newDoseTimes = [...doseTimes];
-      newDoseTimes[currentTimeIndex] = timeString;
-      setDoseTimes(newDoseTimes);
+      const updatedTimes = [...doseTimes];
+      updatedTimes[currentTimeIndex] = timeString;
+      setDoseTimes(updatedTimes);
     }
   };
 
-  const handleSubmit = async (): Promise<void> => {
+  const handleSubmit = async () => {
     try {
-      const userData = await AsyncStorage.getItem("userData");
-      const userId = userData ? JSON.parse(userData)?.id : null;
+      const userDataStr = await AsyncStorage.getItem('userData');
+      const userId: string | null = userDataStr ? JSON.parse(userDataStr)?.id : null;
+      if (!userId) return Alert.alert('Error', 'User not found');
 
-      if (!userId) {
-        Alert.alert("Error", "User not found");
-        return;
-      }
-
-      const medicine: Medicine = {
-        id: Date.now().toString(),
+      const newHealthProduct: HealthProductRequestDto = {
         userId,
-        name: medicineName,
-        totalQuantity: parseFloat(totalQuantity),
-        availableQuantity: parseFloat(totalQuantity), // Initially full
-        thresholdQuantity: parseFloat(thresholdQuantity),
-        doseQuantity: parseFloat(doseQuantity),
-        unit,
-        expiryDate: expiryDate.toISOString(),
-        doseTimes: doseTimes.filter((time) => time),
-      };
-
-      const healthProductDto = {
-        id: null,
-        userId,
-        name: medicineName.trim(),
+        healthProductName: medicineName.trim(),
         totalQuantity: parseFloat(totalQuantity),
         availableQuantity: parseFloat(totalQuantity),
         thresholdQuantity: parseFloat(thresholdQuantity),
         doseQuantity: parseFloat(doseQuantity),
         unit,
-        expiryDate: expiryDate.toISOString().split("T")[0],
-        reminderTimes: doseTimes.filter((time) => time),
+        expiryDate: expiryDate.toISOString().split('T')[0],
+        reminderTimes: doseTimes.filter(Boolean),
       };
 
-      const response = await healthProductApi.createHealthProduct(healthProductDto) as ApiResponse;
-      console.log("Response from API of Helathproduct:", response);
-      if (response) {
-        console.log("Inside status:", response);
-        const existing = await AsyncStorage.getItem("medicines");
-        console.log("Existing medicines:", existing);
-        const medicines: Medicine[] = existing ? JSON.parse(existing) : [];
-        medicines.push(medicine);
-        await AsyncStorage.setItem("medicines", JSON.stringify(medicines));
+      const response = await healthProductApi.createHealthProduct(newHealthProduct);
+      if (!response) return Alert.alert('Error', 'Failed to add medicine');
 
-        if (Platform.OS !== "web") {
-          const notificationIds = await Promise.all(
-            medicine.doseTimes.map(async (time) => {
-              const [hours, minutes] = time.split(":");
-              return await Notifications.scheduleNotificationAsync({
-                content: {
-                  title: `Medicine Time: ${medicine.name}`,
-                  body: `Take ${medicine.doseQuantity} ${medicine.unit}`,
-                  data: { medicineId: response.id },
-                },
-                trigger: {
-                  hour: parseInt(hours),
-                  minute: parseInt(minutes),
-                  repeats: true,
-                } as Notifications.DailyTriggerInput,
-              });
-            })
-          );
-          console.log("Notification IDs:", notificationIds);
-          await AsyncStorage.setItem(`notifications_${response.id}`, JSON.stringify(notificationIds));
-          console.log("Notifications saved successfully");
-        }
+      const localMedicine: MedicineLocalStorage = {
+        id: response.healthProductId,
+        userId,
+        name: response.healthProductName,
+        totalQuantity: response.totalQuantity,
+        availableQuantity: response.availableQuantity,
+        thresholdQuantity: response.thresholdQuantity,
+        doseQuantity: response.doseQuantity,
+        unit: response.unit,
+        expiryDate: response.expiryDate,
+        doseTimes: response.reminderTimes,
+      };
 
-        Alert.alert("Success", "Medicine added successfully");
-        router.push("/medicines" as any);
-      } else {
-        Alert.alert("Error", "Failed to add medicine");
+      const existingStr = await AsyncStorage.getItem('medicines');
+      const existing: MedicineLocalStorage[] = existingStr ? JSON.parse(existingStr) : [];
+      existing.push(localMedicine);
+      await AsyncStorage.setItem('medicines', JSON.stringify(existing));
+
+      if (Platform.OS !== 'web') {
+        const notificationIds = await notificationService.scheduleDailyReminders(
+          response.healthProductId,
+          userId,
+          response.doseQuantity,
+          response.unit,
+          medicineName.trim(),
+          response.reminderTimes
+        );
+        await AsyncStorage.setItem(`notifications_${response.healthProductId}`, JSON.stringify(notificationIds));
       }
-    } catch (err) {
-      console.error("Error saving medicine:", err);
-      Alert.alert("Error", "Failed to save medicine");
+      console.log('Scheduling with:', {
+        healthProductId: response.healthProductId,
+        userId,
+        doseQuantity: response.doseQuantity,
+        unit: response.unit,
+        medicineName: medicineName.trim(),
+        reminderTimes: response.reminderTimes,
+      });
+
+      Alert.alert('Success', 'Medicine added successfully');
+      router.push('/medicines' as never);
+    } catch (error) {
+      console.error('Error saving medicine:', error);
+      Alert.alert('Error', 'Failed to save medicine');
     }
   };
 
@@ -200,7 +178,7 @@ const AddMedicine: React.FC = () => {
         <TextInput
           className="border border-gray-300 rounded-xl p-3 text-base bg-gray-50"
           value={doseQuantity}
-          onChangeText={setDoesQuantity}
+          onChangeText={setDoseQuantity}
           placeholder="Enter quantity"
           placeholderTextColor="#9CA3AF"
           keyboardType="numeric"
@@ -287,11 +265,9 @@ const AddMedicine: React.FC = () => {
           value={expiryDate}
           mode="date"
           display="default"
-          onChange={(event, selectedDate) => {
+          onChange={(_, date) => {
             setShowDatePicker(false);
-            if (selectedDate) {
-              setExpiryDate(selectedDate);
-            }
+            if (date) setExpiryDate(date);
           }}
         />
       )}
@@ -300,7 +276,7 @@ const AddMedicine: React.FC = () => {
         <DateTimePicker
           value={new Date()}
           mode="time"
-          is24Hour={true}
+          is24Hour
           display="default"
           onChange={handleTimeChange}
         />

@@ -1,183 +1,192 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+  Alert,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
-import { LinearGradient } from 'expo-linear-gradient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
+import { LinearGradient } from 'expo-linear-gradient';
 import { format, isBefore, parseISO } from 'date-fns';
-import React, { useEffect, useState, useCallback } from 'react';
-import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+
+import {
+  HealthProductResponseDto,
+} from '@/types/healthProductTypes';
+import { MedicineUsageSummaryDto } from '@/types/medicineUsageLogTypes';
 import { healthProductApi, medicineLogApi } from '@/services/api';
 
-type Medicine = {
-  name: string;
-  healthProductName: string;
-  quantity: number;
-  expiryDate: string;
-  isTakenCount: number;
-  misCount?: number;
-  MisCount?: number;
-};
+// --- Tab Types ---
+type TabType = 'daily' | 'stock' | 'weekly' | 'low';
 
-export default function MedicinesList() {
-  const [medicines, setMedicines] = useState<Medicine[]>([]);
-  const [activeTab, setActiveTab] = useState<'daily' | 'stock' | 'weekly' | 'low'>('daily');
-  const [userId, setUserId] = useState<string | null>(null);
-  const [dailyDoses, setDailyDoses] = useState<any[]>([]);
-  const [stockDetails, setStockDetails] = useState<any[]>([]);
-  const [weeklyConsumption, setWeeklyConsumption] = useState<any[]>([]);
-  const [lowStock, setLowStock] = useState<any[]>([]);
+// --- Component ---
+const MedicinesList: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<TabType>('daily');
   const [loading, setLoading] = useState<boolean>(true);
 
+  const [dailyUsage, setDailyUsage] = useState<MedicineUsageSummaryDto[]>([]);
+  const [stockProducts, setStockProducts] = useState<HealthProductResponseDto[]>([]);
+  const [weeklyUsage, setWeeklyUsage] = useState<MedicineUsageSummaryDto[]>([]);
+  const [lowStockProducts, setLowStockProducts] = useState<HealthProductResponseDto[]>([]);
+
   useEffect(() => {
-    setupNotificationHandler();
+    const sub = Notifications.addNotificationResponseReceivedListener(handleNotification);
+    return () => sub.remove();
   }, []);
 
   useFocusEffect(
     useCallback(() => {
-      loadMedicines();
+      loadData();
     }, [])
   );
 
-  const setupNotificationHandler = () => {
-    Notifications.addNotificationResponseReceivedListener(async (response) => {
-      const actionId = response.actionIdentifier;
-      const medicineId = response.notification.request.content.data.medicineId;
-      const userData = await AsyncStorage.getItem('userData');
-      const userId = JSON.parse(userData ?? '{}')?.id;
-      console.log('actionId', actionId);
-      if (actionId === 'TAKEN' || actionId === 'MISSED') {
-        const logData = {
-          userId,
-          healthProductId: medicineId,
-          isTaken: actionId === 'TAKEN',
-          medicationScheduleIds: response.notification.request.content.data.scheduleId,
-        };
+  const handleNotification = async (
+    response: Notifications.NotificationResponse
+  ): Promise<void> => {
+    try {
+      const action = response.actionIdentifier;
+      const data = response.notification.request.content.data as {
+        medicineId: string;
+        scheduleId: string;
+      };
+      const userJson = await AsyncStorage.getItem('userData');
+      const userId = JSON.parse(userJson ?? '{}')?.id as string | undefined;
+      if (!userId) return;
 
-        console.log('logData', logData);
-        const logresponse = await medicineLogApi.addMedicineUsageLog(logData);
-        // Remove the notification
+      if (action === 'TAKEN' || action === 'MISSED') {
+        await medicineLogApi.addMedicineUsageLog({
+          userId,
+          healthProductId: data.medicineId,
+          isTaken: action === 'TAKEN',
+          createdAt: new Date().toISOString()
+        });
         await Notifications.dismissNotificationAsync(response.notification.request.identifier);
       }
-    });
+    } catch (e) {
+      console.error('Notification error:', e);
+    }
   };
 
-  const loadMedicines = async () => {
+  const loadData = async (): Promise<void> => {
     try {
-      const storedMedicines = await AsyncStorage.getItem('medicines');
-      if (storedMedicines) {
-        setMedicines(JSON.parse(storedMedicines));
+      setLoading(true);
+      const userJson = await AsyncStorage.getItem('userData');
+      const userId = JSON.parse(userJson ?? '{}')?.id as string | undefined;
+      if (!userId) {
+        Alert.alert('Error', 'User not found.');
+        return;
       }
 
-      const userData = await AsyncStorage.getItem('userData');
-      if (!userData) return;
-
-      const { id: uid } = JSON.parse(userData);
-      setUserId(uid);
-
-      const [dailyRes, stockRes, weeklyRes, lowRes] = await Promise.all([
+      const [daily, stock, weekly, low] = await Promise.all([
         medicineLogApi.getTodayLogs(),
         healthProductApi.getAllHealthProducts(),
         medicineLogApi.getLogsForPastDays(7),
         healthProductApi.getLowStockHealthProducts(),
       ]);
 
-      setDailyDoses(dailyRes.data);
-      setStockDetails(stockRes.data);
-      setWeeklyConsumption(weeklyRes.data);
-      setLowStock(lowRes?.data);
-    } catch (error) {
-      console.error('Error loading medicines:', error);
+      setDailyUsage(daily ?? []);
+      setStockProducts(stock ?? []);
+      setWeeklyUsage(weekly ?? []);
+      setLowStockProducts(low ?? []);
+    } catch (e) {
+      console.error('Load data error:', e);
+      Alert.alert('Error', 'Failed to load data.');
     } finally {
       setLoading(false);
     }
   };
 
-  const renderCard = (
+  const renderCard = <T,>(
     title: string,
-    items: any[],
-    renderContent: (item: any, index: number) => JSX.Element,
-    emptyMessage: string
-  ) => (
+    items: T[],
+    renderItem: (item: T, index: number) => JSX.Element,
+    emptyMsg: string
+  ): JSX.Element => (
     <View className="mx-5 mb-6">
       <View className="flex-row items-center mb-4">
         <View className="w-1.5 h-6 bg-blue-500 rounded-full mr-2" />
         <Text className="text-xl font-semibold text-gray-800">{title}</Text>
       </View>
-
-      {items?.length === 0 ? (
-        <View className="items-center justify-center py-10">
+      {items.length === 0 ? (
+        <View className="items-center py-10">
           <Ionicons name="sad-outline" size={40} color="#9CA3AF" />
-          <Text className="text-gray-500 text-base mt-3">{emptyMessage}</Text>
+          <Text className="text-base text-gray-500 mt-3">{emptyMsg}</Text>
         </View>
       ) : (
-        items?.map(renderContent)
+        items.map(renderItem)
       )}
     </View>
   );
 
-  const MedicineCard: React.FC<{ item: Medicine, type: 'daily' | 'stock' | 'weekly' | 'low' }> = ({ item, type }) => (
-    <View
-      className={`mb-4 rounded-2xl overflow-hidden shadow-sm ${type === 'low' ? 'border-2 border-red-100' : ''}`}
-    >
-      <LinearGradient
-        colors={['#ffffff', '#f8f9fa']}
-        className="p-4 rounded-2xl"
-      >
-        <View className="flex-row items-center mb-3">
-          <View className={`w-9 h-9 rounded-full items-center justify-center ${type === 'low' ? 'bg-red-100' : 'bg-blue-100'}`}>
-            <Ionicons
-              name="medical"
-              size={22}
-              color={type === 'low' ? '#F87171' : '#60A5FA'}
-            />
-          </View>
-          <Text className="text-base font-semibold text-gray-800 ml-2">{item?.name || item?.healthProductName}</Text>
-        </View>
-
-        {type === 'stock' && (
-          <View className="flex-row items-center mt-2">
-            <View className="flex-row items-center">
-              <Ionicons name="pricetag" size={16} color="#4B5563" />
-              <Text className="text-sm text-gray-600 ml-1">Stock: {item.quantity}</Text>
-            </View>
-            <View className="flex-row items-center ml-4">
-              <Ionicons name="calendar" size={16} color="#4B5563" />
-              <Text
-                className={`text-sm ml-1 ${isBefore(parseISO(item.expiryDate), new Date()) ? 'text-red-500 font-medium' : 'text-gray-600'}`}
-              >
-                Exp: {format(parseISO(item.expiryDate), 'dd MMM yyyy')}
-              </Text>
-            </View>
-          </View>
-        )}
-
-        {(type === 'daily' || type === 'weekly') && (
-          <View className="flex-row items-center mt-2">
-            <View className="flex-row items-center bg-green-50 rounded-full px-3 py-1.5 mr-2">
-              <Ionicons name="checkmark-circle" size={16} color="#10B981" />
-              <Text className="text-xs font-medium text-green-700 ml-1">Taken: {item.isTakenCount}</Text>
-            </View>
-            <View className="flex-row items-center bg-red-50 rounded-full px-3 py-1.5">
-              <Ionicons name="close-circle" size={16} color="#EF4444" />
-              <Text className="text-xs font-medium text-red-700 ml-1">Missed: {item.misCount || item.MisCount || 0}</Text>
-            </View>
-          </View>
-        )}
-
-        {type === 'low' && (
-          <View className="flex-row items-center bg-red-50 px-3 py-2 rounded-lg mt-2">
-            <Ionicons name="warning" size={18} color="#EF4444" />
-            <Text className="text-sm text-red-600 font-medium ml-1">Only {item?.quantity} left in stock</Text>
-          </View>
-        )}
-      </LinearGradient>
+  const DailyCard = (
+    item: MedicineUsageSummaryDto,
+    idx: number
+  ): JSX.Element => (
+    <View key={idx} className="mb-4 p-4 bg-white rounded-2xl shadow-sm">
+      <Text className="text-base font-semibold text-gray-800">
+        {item.healthProductName}
+      </Text>
+      <View className="flex-row mt-2">
+        <Text className="text-sm text-green-700 mr-4">
+          Taken: {item.takenCount}
+        </Text>
+        <Text className="text-sm text-red-700">
+          Missed: {item.missedCount}
+        </Text>
+      </View>
     </View>
   );
 
-  const TabButton: React.FC<{ title: string, icon: React.ComponentProps<typeof Ionicons>['name'], tab: 'daily' | 'stock' | 'weekly' | 'low' }> = ({ title, icon, tab }) => (
+  const StockCard = (
+    item: HealthProductResponseDto,
+    idx: number
+  ): JSX.Element => {
+    const expired = isBefore(parseISO(item.expiryDate), new Date());
+    return (
+      <View key={idx} className="mb-4 rounded-2xl overflow-hidden shadow-sm border">
+        <LinearGradient
+          colors={['#ffffff', '#f8f9fa']}
+          className="p-4 rounded-2xl"
+        >
+          <Text className="text-base font-semibold text-gray-800">
+            {item.healthProductName}
+          </Text>
+          <View className="flex-row mt-2">
+            <Text className="text-sm text-gray-600 mr-4">
+              Stock: {item.availableQuantity}/{item.totalQuantity}
+            </Text>
+            <Text
+              className={`text-sm ml-auto ${expired ? 'text-red-500' : 'text-gray-600'
+                }`}
+            >
+              Exp: {format(parseISO(item.expiryDate), 'dd MMM yyyy')}
+            </Text>
+          </View>
+        </LinearGradient>
+      </View>
+    );
+  };
+
+  const WeeklyCard = DailyCard;
+  const LowCard = StockCard;
+
+  const TabButton = ({
+    title,
+    icon,
+    tab,
+  }: {
+    title: string;
+    icon: React.ComponentProps<typeof Ionicons>['name'];
+    tab: TabType;
+  }): JSX.Element => (
     <TouchableOpacity
       onPress={() => setActiveTab(tab)}
-      className={`items-center py-3 px-3 rounded-xl ${activeTab === tab ? 'bg-blue-500 shadow-md' : 'bg-gray-100'}`}
+      className={`items-center py-3 px-3 rounded-xl ${activeTab === tab ? 'bg-blue-500 shadow-md' : 'bg-gray-100'
+        }`}
     >
       <Ionicons
         name={icon}
@@ -185,7 +194,8 @@ export default function MedicinesList() {
         color={activeTab === tab ? '#FFFFFF' : '#9CA3AF'}
       />
       <Text
-        className={`text-xs font-medium mt-1 ${activeTab === tab ? 'text-white' : 'text-gray-500'}`}
+        className={`text-xs font-medium mt-1 ${activeTab === tab ? 'text-white' : 'text-gray-500'
+          }`}
       >
         {title}
       </Text>
@@ -196,7 +206,7 @@ export default function MedicinesList() {
     return (
       <View className="flex-1 justify-center items-center bg-white">
         <ActivityIndicator size="large" color="#60A5FA" />
-        <Text className="mt-4 text-base text-gray-600">Loading Your Health Data...</Text>
+        <Text className="mt-4 text-base text-gray-600">Loading data...</Text>
       </View>
     );
   }
@@ -207,7 +217,9 @@ export default function MedicinesList() {
         colors={['#60A5FA', '#93C5FD']}
         className="pt-14 pb-10 items-center justify-center rounded-b-3xl"
       >
-        <Text className="text-2xl font-bold text-white mb-3">Medication Management</Text>
+        <Text className="text-2xl font-bold text-white mb-3">
+          Medication Management
+        </Text>
         <View className="bg-white/20 p-3 rounded-full">
           <Ionicons name="medkit" size={36} color="#FFFFFF" />
         </View>
@@ -220,33 +232,39 @@ export default function MedicinesList() {
         <TabButton title="Low" icon="alert-circle" tab="low" />
       </View>
 
-      {activeTab === 'daily' && renderCard(
-        "Today's Medications",
-        dailyDoses,
-        (item, index) => <MedicineCard key={index} item={item} type="daily" />,
-        "No medications scheduled for today"
-      )}
+      {activeTab === 'daily' &&
+        renderCard(
+          "Today's Summary",
+          dailyUsage,
+          DailyCard,
+          'No doses logged today.'
+        )}
 
-      {activeTab === 'stock' && renderCard(
-        "Medicine Stock",
-        stockDetails,
-        (item, index) => <MedicineCard key={index} item={item} type="stock" />,
-        "No stock information available"
-      )}
+      {activeTab === 'stock' &&
+        renderCard(
+          'Stock Overview',
+          stockProducts,
+          StockCard,
+          'No products in stock.'
+        )}
 
-      {activeTab === 'weekly' && renderCard(
-        "Weekly Summary",
-        weeklyConsumption,
-        (item, index) => <MedicineCard key={index} item={item} type="weekly" />,
-        "No consumption data this week"
-      )}
+      {activeTab === 'weekly' &&
+        renderCard(
+          'Weekly Summary',
+          weeklyUsage,
+          WeeklyCard,
+          'No usage data this week.'
+        )}
 
-      {activeTab === 'low' && renderCard(
-        "Low Stock Alerts",
-        lowStock,
-        (item, index) => <MedicineCard key={index} item={item} type="low" />,
-        "All medications are well-stocked"
-      )}
+      {activeTab === 'low' &&
+        renderCard(
+          'Low Stock Alerts',
+          lowStockProducts,
+          LowCard,
+          'All products sufficiently stocked.'
+        )}
     </ScrollView>
   );
-}
+};
+
+export default MedicinesList;

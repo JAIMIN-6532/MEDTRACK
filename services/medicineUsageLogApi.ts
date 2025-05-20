@@ -19,16 +19,19 @@ export const getLogsForPastDays = async (days: number): Promise<MedicineLogRespo
 };
 
 // Add a new medicine usage log
+
 export const addMedicineUsageLog = async (logData: LogData): Promise<boolean> => {
     try {
+        console.log('Adding log data:', logData);
         const res = await api.post('/medicine-logs/log', logData);
+        console.log('Response from adding log:', res);
         return res.status === 201;
     } catch (error: any) {
         handleApiError(error);
         throw error?.response?.data || error.message || 'An error occurred while adding the log';
     }
 };
-
+// ??????
 // Fetch today's medicine usage logs
 export const getTodayLogs = async (): Promise<MedicineLogResponse> => {
     try {

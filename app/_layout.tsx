@@ -22,20 +22,23 @@ Notifications.setNotificationHandler({
   }),
 });
 
+
 if (Platform.OS !== "web") {
   Notifications.setNotificationCategoryAsync("MEDICINE_REMINDER", [
     {
       identifier: "TAKEN",
-      buttonTitle: "Taken",
+      buttonTitle: "Taken ✅",
       options: {
+        opensAppToForeground: true,
         isAuthenticationRequired: false,
         isDestructive: false,
       },
     },
     {
       identifier: "MISSED",
-      buttonTitle: "Missed",
+      buttonTitle: "Missed ❌",
       options: {
+        opensAppToForeground: true,
         isAuthenticationRequired: false,
         isDestructive: true,
       },

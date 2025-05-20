@@ -4,12 +4,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
 import { medicineLogApi, healthProductApi } from './api';
-import { LogData } from '../types/medicineUsageLogTypes';
+import { LogData, NotificationData } from '../types/medicineUsageLogTypes';
 
 class NotificationService {
     private static instance: NotificationService;
     private responseListener?: Notifications.Subscription;
-    private readonly categoryIdentifier = 'medication-reminder';
+    private notificationReceivedListener?: Notifications.Subscription;
+    private readonly categoryIdentifier = 'MEDICINE_REMINDER';
+    private processingNotificationIds: Set<string> = new Set();
 
     private constructor() { }
 
@@ -23,24 +25,21 @@ class NotificationService {
     public async initialize(): Promise<void> {
         console.log('🔧 Initializing Notification Service...');
 
-        // Critical fix: Set up notification handler first
-        Notifications.setNotificationHandler({
-            handleNotification: async () => ({
-                shouldShowAlert: true,
-                shouldPlaySound: true,
-                shouldSetBadge: true,
-            }),
-        });
-
-        // Set up response handler
+        // Clean up existing listeners if they exist
         if (this.responseListener) {
             Notifications.removeNotificationSubscription(this.responseListener);
         }
 
-        // Set up foreground notification handler for Android
-        const foregroundSubscription = Notifications.addNotificationReceivedListener(notification => {
-            console.log('🔔 Notification received in foreground:', notification.request.identifier);
-        });
+        if (this.notificationReceivedListener) {
+            Notifications.removeNotificationSubscription(this.notificationReceivedListener);
+        }
+
+        // Set up notification received listener (foreground)
+        this.notificationReceivedListener = Notifications.addNotificationReceivedListener(
+            notification => {
+                console.log('📥 Notification received in foreground:', notification);
+            }
+        );
 
         // This is the key handler for notification responses (including actions)
         this.responseListener = Notifications.addNotificationResponseReceivedListener(
@@ -94,13 +93,26 @@ class NotificationService {
 
     private async setupNotificationCategory(): Promise<void> {
         try {
+            // For Android, we need to set up the channel first
+            if (Platform.OS === 'android') {
+                await Notifications.setNotificationChannelAsync('med-pill', {
+                    name: 'Medication Reminders',
+                    importance: Notifications.AndroidImportance.HIGH,
+                    description: 'Reminders to take your medication',
+                    vibrationPattern: [0, 250, 250, 250],
+                    sound: 'default',
+                    enableLights: true,
+                    showBadge: true,
+                });
+            }
+
+            // Set up the notification category with actions
             await Notifications.setNotificationCategoryAsync(this.categoryIdentifier, [
                 {
                     identifier: 'TAKEN',
                     buttonTitle: 'Taken ✅',
-                    // Set options for iOS
                     options: {
-                        opensAppToForeground: true, // Changed to true to ensure proper handling
+                        opensAppToForeground: false, // Changed to false to prevent app opening unnecessarily
                         isDestructive: false,
                         isAuthenticationRequired: false
                     },
@@ -108,9 +120,8 @@ class NotificationService {
                 {
                     identifier: 'MISSED',
                     buttonTitle: 'Missed ❌',
-                    // Set options for iOS
                     options: {
-                        opensAppToForeground: true, // Changed to true to ensure proper handling
+                        opensAppToForeground: false, // Changed to false to prevent app opening unnecessarily
                         isDestructive: true,
                         isAuthenticationRequired: false
                     },
@@ -121,60 +132,76 @@ class NotificationService {
             console.error('❌ Error setting up notification categories:', error);
         }
     }
-
+    //just 1 min let mecheck ..
     private handleNotificationAction = async (
         response: Notifications.NotificationResponse
     ): Promise<void> => {
         try {
             const { actionIdentifier, notification } = response;
-            const payload = notification.request.content.data as LogData;
+            const payload = notification.request.content.data as NotificationData;
 
-            // The key issue - don't use identifiers from the notification for dismissal
-            const notificationId = response.notification?.request?.identifier;
+            console.log("🔍 Payload received:", payload);
 
-            console.log('🔔 Received action:', actionIdentifier);
-            console.log('🔔 Response type:', response.actionIdentifier);
-            console.log('🔔 Notification identifier:', notificationId || 'NONE');
-            console.log('🔔 Payload data:', JSON.stringify(payload || {}));
+            // Get the notification ID from the response
+            const notificationId = response.notification.request.identifier;
+            console.log('🔔 Notification ID:', notificationId);
 
-            // Process notifications even if there's no actionIdentifier (default action)
-            const userAction = actionIdentifier || 'DEFAULT';
+            // Check if we're already processing this notification to prevent duplicates
+            if (this.processingNotificationIds.has(notificationId)) {
+                console.log('⚠️ Already processing this notification, skipping');
+                return;
+            }
+
+            // Add to processing set
+            this.processingNotificationIds.add(notificationId);
 
             if (!payload || !payload.userId || !payload.healthProductId) {
-                console.warn('⚠️ Invalid payload received in notification action.');
-                // Still try to dismiss notification even with invalid payload
-            } else {
-                // Process action based on identifier
+                console.error('❌ Invalid payload:', payload);
+                this.processingNotificationIds.delete(notificationId);
+                return;
+            }
+
+            // Process action based on identifier
+            const userAction =
+                actionIdentifier === Notifications.DEFAULT_ACTION_IDENTIFIER
+                    ? 'DEFAULT'
+                    : actionIdentifier;
+
+            console.log('🔔 Processing action:', userAction);
+
+            try {
+                // First dismiss the notification to prevent multiple taps
+                if (notificationId) {
+                    await Notifications.dismissNotificationAsync(notificationId);
+                    console.log('✅ Dismissed notification:', notificationId);
+                }
+
+                // Then process the action
                 if (userAction === 'TAKEN' || userAction === 'DEFAULT') {
-                    console.log('✅ TAKEN action - Logging usage');
                     await this.logMedicineUsage(payload, true);
                 } else if (userAction === 'MISSED') {
-                    console.log('❌ MISSED action - Marking as missed');
                     await this.logMedicineUsage(payload, false);
                 }
-            }
 
-            // Important: Use the notification property from Expo API for dismissal
-            // This is different from manually using the identifier
-            try {
-                // Method 1: Try to dismiss all delivered notifications
+                // As a backup, dismiss all notifications
                 await Notifications.dismissAllNotificationsAsync();
-                console.log('🧹 Dismissed all delivered notifications');
-
-                // Method 2: As a backup, also try to dismiss the specific notification
+                console.log('✅ Dismissed all notifications');
+            } catch (actionError) {
+                console.error('❌ Error processing action:', actionError);
+                // Even if there's an error, try to dismiss the notification
                 if (notificationId) {
-                    try {
-                        await Notifications.dismissNotificationAsync(notificationId);
-                        console.log('🧹 Dismissed specific notification');
-                    } catch (specificError) {
-                        console.log('⚠️ Could not dismiss specific notification, already handled by dismissAll');
-                    }
+                    await Notifications.dismissNotificationAsync(notificationId);
                 }
-            } catch (dismissError) {
-                console.warn('⚠️ Error dismissing notifications:', dismissError);
+            } finally {
+                // Remove from processing set
+                this.processingNotificationIds.delete(notificationId);
             }
         } catch (error) {
-            console.error('❌ Error handling notification action:', error);
+            console.error('❌ Error in handleNotificationAction:', error);
+            // Make sure to clean up processing set in case of error
+            if (response?.notification?.request?.identifier) {
+                this.processingNotificationIds.delete(response.notification.request.identifier);
+            }
         }
     };
 
@@ -190,6 +217,9 @@ class NotificationService {
         const notificationIds: string[] = [];
 
         try {
+            // Ensure notification categories are set up
+            await this.setupNotificationCategory();
+
             for (const time of scheduleTimes) {
                 if (!time) {
                     console.warn('⚠️ Empty time provided for reminder, skipping');
@@ -201,10 +231,8 @@ class NotificationService {
                 let minute = 0;
 
                 if (time.includes(':')) {
-                    // Format: "HH:MM"
                     [hour, minute] = time.split(':').map(num => parseInt(num, 10));
                 } else {
-                    // Try to handle 24-hour time format without colon
                     const timeStr = time.trim();
                     if (timeStr.length === 4) {
                         hour = parseInt(timeStr.substring(0, 2), 10);
@@ -226,6 +254,17 @@ class NotificationService {
 
                 console.log(`⏰ Scheduling for ${hour}:${minute < 10 ? '0' + minute : minute}`);
 
+                // Create a unique identifier for this notification
+                const uniqueId = `${healthProductId}_${hour}_${minute}_${Date.now()}`;
+
+                if (!healthProductId || !userId) {
+                    console.error('❌ Missing healthProductId or userId when scheduling notification', {
+                        healthProductId,
+                        userId
+                    });
+                    continue;
+                }
+
                 const content = {
                     title: `Time to take ${medicineName}`,
                     body: `Dose: ${doseQuantity} ${unit}`,
@@ -233,18 +272,32 @@ class NotificationService {
                     data: {
                         userId,
                         healthProductId,
-                        createdAt: new Date().toISOString() // Add timestamp for uniqueness
-                    } as LogData,
+                        createdAt: new Date().toISOString(),
+                        notificationId: uniqueId
+                    } as NotificationData,
                     sound: 'default',
+                    priority: Notifications.AndroidNotificationPriority.HIGH,
+                    vibrate: [0, 250, 250, 250],
+                    sticky: false, // Changed to false so notifications can be auto-dismissed
                 };
 
                 const trigger = Platform.OS === 'android'
-                    ? { hour, minute, repeats: true, channelId: 'med-pill' }
-                    : { hour, minute, repeats: true };
+                    ? {
+                        hour,
+                        minute,
+                        repeats: true,
+                        channelId: 'med-pill'
+                    }
+                    : {
+                        hour,
+                        minute,
+                        repeats: true
+                    };
 
                 const notificationId = await Notifications.scheduleNotificationAsync({
                     content,
                     trigger,
+                    identifier: uniqueId
                 });
 
                 if (notificationId) {
@@ -255,7 +308,7 @@ class NotificationService {
                 }
             }
 
-            // Store notification IDs with prefix to prevent conflicts
+            // Store notification IDs
             if (notificationIds.length > 0) {
                 await AsyncStorage.setItem(
                     `notif-ids:${healthProductId}`,
@@ -266,7 +319,7 @@ class NotificationService {
             return notificationIds;
         } catch (error) {
             console.error('❌ Error scheduling reminders:', error);
-            return notificationIds; // Return any IDs we managed to create
+            return notificationIds;
         }
     }
 
@@ -298,22 +351,47 @@ class NotificationService {
         }
     }
 
-    private async logMedicineUsage(payload: LogData, isTaken: boolean): Promise<void> {
+    private async logMedicineUsage(payload: NotificationData, isTaken: boolean): Promise<void> {
         try {
             console.log(`📦 Logging medicine usage for ${payload.healthProductId}`);
-            await medicineLogApi.addMedicineUsageLog({
-                userId: payload.userId,
-                healthProductId: payload.healthProductId,
-                isTaken,
-                createdAt: new Date().toISOString(),
-            });
 
-            if (isTaken) {
-                await healthProductApi.recordMedicineUsage(payload.healthProductId);
+            // Add retry logic for API calls
+            let retryCount = 0;
+            const maxRetries = 3;
+
+            while (retryCount < maxRetries) {
+                try {
+                    // First API call - add medicine usage log
+                    await medicineLogApi.addMedicineUsageLog({
+                        userId: payload.userId,
+                        healthProductId: payload.healthProductId,
+                        isTaken,
+                        createdAt: new Date().toISOString(),
+                    });
+
+                    // Second API call - only if medicine was taken
+                    if (isTaken) {
+                        await healthProductApi.recordMedicineUsage(payload.healthProductId);
+                    }
+
+                    console.log(`✅ Logged medicine usage successfully (taken: ${isTaken})`);
+                    break; // Success, exit the retry loop
+                } catch (apiError) {
+                    retryCount++;
+                    console.warn(`⚠️ API call failed (attempt ${retryCount}/${maxRetries}):`, apiError);
+
+                    if (retryCount >= maxRetries) {
+                        throw apiError; // Rethrow after max retries
+                    }
+
+                    // Wait before retrying (exponential backoff)
+                    await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryCount)));
+                }
             }
-            console.log(`✅ Logged medicine usage successfully (taken: ${isTaken})`);
         } catch (error) {
-            console.error('❌ Failed to log medicine usage:', error);
+            console.error('❌ Failed to log medicine usage after retries:', error);
+            // You could store failed logs locally and retry later
+            // Or notify the user that their action couldn't be recorded
         }
     }
 
@@ -331,6 +409,37 @@ class NotificationService {
             });
         } catch (error) {
             console.error('❌ Error listing notifications:', error);
+        }
+    }
+
+    public async sendTestNotification(): Promise<void> {
+        try {
+            const content = {
+                title: 'Test Notification',
+                body: 'This is a test notification with action buttons',
+                categoryIdentifier: this.categoryIdentifier,
+                data: {
+                    userId: 'test',
+                    healthProductId: 'test',
+                    createdAt: new Date().toISOString(),
+                    notificationId: `test_${Date.now()}`
+                } as NotificationData,
+                sound: 'default',
+                priority: Notifications.AndroidNotificationPriority.HIGH,
+                vibrate: [0, 250, 250, 250],
+                sticky: false, // Changed to false to allow auto-dismissal
+            };
+
+            const notificationId = await Notifications.scheduleNotificationAsync({
+                content,
+                trigger: null,
+                identifier: `test_${Date.now()}`
+            });
+
+            console.log('✅ Test notification sent with ID:', notificationId);
+        } catch (error) {
+            console.error('❌ Error sending test notification:', error);
+            throw error;
         }
     }
 }

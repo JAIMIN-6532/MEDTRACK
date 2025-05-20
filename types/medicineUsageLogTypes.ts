@@ -5,6 +5,10 @@ export interface LogData {
     createdAt: string;
 }
 
+export interface NotificationData extends Omit<LogData, 'isTaken'> {
+    notificationId: string;
+}
+
 export interface MedicineUsageSummaryDto {
     healthProductId: string;
     healthProductName: string;

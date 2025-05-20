@@ -2,6 +2,7 @@ import { healthProductApi } from '@/services/api';
 import { notificationService } from '@/services/notificationService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import * as Notifications from 'expo-notifications';
 import { Picker } from '@react-native-picker/picker';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
@@ -67,8 +68,19 @@ const AddMedicine: React.FC = () => {
   const handleSubmit = async () => {
     try {
       const userDataStr = await AsyncStorage.getItem('userData');
-      const userId: string | null = userDataStr ? JSON.parse(userDataStr)?.id : null;
-      if (!userId) return Alert.alert('Error', 'User not found');
+      const userData = userDataStr ? JSON.parse(userDataStr) : null;
+      
+      if (!userData || !userData.id) {
+        console.error('❌ User data not found or invalid:', userData);
+        return Alert.alert('Error', 'User not found');
+      }
+
+      const userId = userData.id;
+      console.log('👤 User ID:', userId);
+
+      if (!medicineName.trim()) {
+        return Alert.alert('Error', 'Please enter medicine name');
+      }
 
       const newHealthProduct: HealthProductRequestDto = {
         userId,
@@ -82,8 +94,18 @@ const AddMedicine: React.FC = () => {
         reminderTimes: doseTimes.filter(Boolean),
       };
 
+      console.log('📦 Creating health product with data:', newHealthProduct);
+
       const response = await healthProductApi.createHealthProduct(newHealthProduct);
-      if (!response) return Alert.alert('Error', 'Failed to add medicine');
+      const healthProductId = response?.healthProductId; 
+      console.log("HealthProduct id " , healthProductId)
+      
+      if (!response || !response.healthProductId) {
+        console.error('❌ Invalid response from API:', response);
+        return Alert.alert('Error', 'Failed to add medicine');
+      }
+
+      console.log('✅ Health product created with ID:', response.healthProductId);
 
       const localMedicine: MedicineLocalStorage = {
         id: response.healthProductId,
@@ -97,36 +119,76 @@ const AddMedicine: React.FC = () => {
         expiryDate: response.expiryDate,
         doseTimes: response.reminderTimes,
       };
-
+      //check kar add karine.. ok
       const existingStr = await AsyncStorage.getItem('medicines');
       const existing: MedicineLocalStorage[] = existingStr ? JSON.parse(existingStr) : [];
       existing.push(localMedicine);
       await AsyncStorage.setItem('medicines', JSON.stringify(existing));
 
-      if (Platform.OS !== 'web') {
-        const notificationIds = await notificationService.scheduleDailyReminders(
-          response.healthProductId,
-          userId,
-          response.doseQuantity,
-          response.unit,
-          medicineName.trim(),
-          response.reminderTimes
-        );
-        await AsyncStorage.setItem(`notifications_${response.healthProductId}`, JSON.stringify(notificationIds));
-      }
-      console.log('Scheduling with:', {
-        healthProductId: response.healthProductId,
-        userId,
-        doseQuantity: response.doseQuantity,
-        unit: response.unit,
-        medicineName: medicineName.trim(),
-        reminderTimes: response.reminderTimes,
-      });
+      if(Platform.OS !== 'web') {
+          const notificationIds = await Promise.all(
+            localMedicine.doseTimes.map(async(t,index)=>{
+              const [hour, minute] = t.split(':');
+              console.log("inside index:",healthProductId);
+              const identifier = await Notifications.scheduleNotificationAsync({
+                //asyncstorage ma medicines (thi ) save che ne ? ? 
+                // yes
+                content: {
+                  title: `Time to take ${localMedicine.name}`,
+                  body: `Don't forget to take your ${localMedicine.doseQuantity}}`,
+                  data: { id: healthProductId, scheduleId: healthProductId },
+                  categoryIdentifier: "MEDICINE_REMINDER"
+                },
+                trigger: {
+                  hour: parseInt(hour),
+                  minute: parseInt(minute),
+                  repeats: true,
+                },
+              });
+              console.log('Notification scheduled with ID:', identifier);
+              return identifier;
+              }));
+              await AsyncStorage.setItem(
+                `notifications_${response.healthProductId}`,  
+                JSON.stringify(notificationIds)
+              );
+
+            }
+      // if (Platform.OS !== 'web') {
+      //   console.log('🔔 Scheduling notifications with:', {
+      //     healthProductId: response.healthProductId,
+      //     userId,
+      //     doseQuantity: response.doseQuantity,
+      //     unit: response.unit,
+      //     medicineName: medicineName.trim(),
+      //     reminderTimes: response.reminderTimes,
+      //   });
+
+      //   const notificationIds = await notificationService.scheduleDailyReminders(
+      //     response.healthProductId,
+      //     userId,
+      //     response.doseQuantity,
+      //     response.unit,
+      //     medicineName.trim(),
+      //     response.reminderTimes
+      //   );
+
+      //   if (notificationIds && notificationIds.length > 0) {
+      //     await AsyncStorage.setItem(
+      //       `notifications_${response.healthProductId}`,
+      //       JSON.stringify(notificationIds)
+      //     );
+      //     console.log('✅ Notifications scheduled successfully:', notificationIds);
+      //   } else {
+      //     console.warn('⚠️ No notification IDs returned');
+      //   }
+      // }
 
       Alert.alert('Success', 'Medicine added successfully');
       router.push('/medicines' as never);
+
     } catch (error) {
-      console.error('Error saving medicine:', error);
+      console.error('❌ Error saving medicine:', error);
       Alert.alert('Error', 'Failed to save medicine');
     }
   };

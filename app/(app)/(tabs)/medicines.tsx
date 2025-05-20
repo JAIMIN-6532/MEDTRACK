@@ -34,42 +34,48 @@ const MedicinesList: React.FC = () => {
   const [lowStockProducts, setLowStockProducts] = useState<HealthProductResponseDto[]>([]);
 
   useEffect(() => {
-    const sub = Notifications.addNotificationResponseReceivedListener(handleNotification);
-    return () => sub.remove();
-  }, []);
+    handleNotificationResponse();
+  },[]);
+
 
   useFocusEffect(
     useCallback(() => {
       loadData();
     }, [])
   );
-
-  const handleNotification = async (
-    response: Notifications.NotificationResponse
-  ): Promise<void> => {
-    try {
-      const action = response.actionIdentifier;
-      const data = response.notification.request.content.data as {
-        medicineId: string;
-        scheduleId: string;
-      };
-      const userJson = await AsyncStorage.getItem('userData');
-      const userId = JSON.parse(userJson ?? '{}')?.id as string | undefined;
-      if (!userId) return;
-
-      if (action === 'TAKEN' || action === 'MISSED') {
-        await medicineLogApi.addMedicineUsageLog({
+  //now it will not be undefined
+  const handleNotificationResponse = async () => {
+    Notifications.addNotificationResponseReceivedListener(async (response) => {
+      console.log('Notification response received inside medicines:', response);
+      const { actionIdentifier } = response;
+      const medicineId = response.notification.request.content.data.id;
+      const userData = await AsyncStorage.getItem('userData'); 
+      const userId = JSON.parse(userData ?? '{}')?.id as string | undefined;
+      if (!userId) {
+        Alert.alert('Error', 'User not found.');
+        return;
+      }
+      if (actionIdentifier === 'TAKEN' || actionIdentifier === 'MISSED') {
+        const logData = {
           userId,
-          healthProductId: data.medicineId,
-          isTaken: action === 'TAKEN',
+          healthProductId: medicineId,
+          isTaken: actionIdentifier === 'TAKEN',
           createdAt: new Date().toISOString()
-        });
+        };
+        console.log('Log data:', logData);
+        const res = await medicineLogApi.addMedicineUsageLog(logData);
+        console.log('Response from adding log from medicines: ', res);
         await Notifications.dismissNotificationAsync(response.notification.request.identifier);
       }
-    } catch (e) {
-      console.error('Notification error:', e);
-    }
-  };
+    })
+
+  }
+
+  //now check it ok
+  // no buttons are their and when i click it gone nothing happens
+
+//  ???a
+
 
   const loadData = async (): Promise<void> => {
     try {

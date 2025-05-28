@@ -12,6 +12,7 @@ import { handleApiError } from '../utils/handleApiError';
 export const registerUser = async (userData: UserData): Promise<RegisterResponse> => {
     try {
         const res = await api.post<RegisterResponse>('/user/signup', userData);
+        console.log("res : ", res.data);
         return res.data;
     } catch (error) {
         handleApiError(error);

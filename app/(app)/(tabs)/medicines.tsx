@@ -1,24 +1,23 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect } from '@react-navigation/native';
+import { format, isBefore, parseISO } from 'date-fns';
+import { LinearGradient } from 'expo-linear-gradient';
+import React, { useCallback, useState } from 'react';
 import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
   ActivityIndicator,
   Alert,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from '@react-navigation/native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Notifications from 'expo-notifications';
-import { LinearGradient } from 'expo-linear-gradient';
-import { format, isBefore, parseISO } from 'date-fns';
 
+import { healthProductApi, medicineLogApi } from '@/services/api';
 import {
   HealthProductResponseDto,
 } from '@/types/healthProductTypes';
 import { MedicineUsageSummaryDto } from '@/types/medicineUsageLogTypes';
-import { healthProductApi, medicineLogApi } from '@/services/api';
 
 // --- Tab Types ---
 type TabType = 'daily' | 'stock' | 'weekly' | 'low';
@@ -33,49 +32,11 @@ const MedicinesList: React.FC = () => {
   const [weeklyUsage, setWeeklyUsage] = useState<MedicineUsageSummaryDto[]>([]);
   const [lowStockProducts, setLowStockProducts] = useState<HealthProductResponseDto[]>([]);
 
-  useEffect(() => {
-    handleNotificationResponse();
-  },[]);
-
-
   useFocusEffect(
     useCallback(() => {
       loadData();
     }, [])
   );
-  //now it will not be undefined
-  const handleNotificationResponse = async () => {
-    Notifications.addNotificationResponseReceivedListener(async (response) => {
-      console.log('Notification response received inside medicines:', response);
-      const { actionIdentifier } = response;
-      const medicineId = response.notification.request.content.data.id;
-      const userData = await AsyncStorage.getItem('userData'); 
-      const userId = JSON.parse(userData ?? '{}')?.id as string | undefined;
-      if (!userId) {
-        Alert.alert('Error', 'User not found.');
-        return;
-      }
-      if (actionIdentifier === 'TAKEN' || actionIdentifier === 'MISSED') {
-        const logData = {
-          userId,
-          healthProductId: medicineId,
-          isTaken: actionIdentifier === 'TAKEN',
-          createdAt: new Date().toISOString()
-        };
-        console.log('Log data:', logData);
-        const res = await medicineLogApi.addMedicineUsageLog(logData);
-        console.log('Response from adding log from medicines: ', res);
-        await Notifications.dismissNotificationAsync(response.notification.request.identifier);
-      }
-    })
-
-  }
-
-  //now check it ok
-  // no buttons are their and when i click it gone nothing happens
-
-//  ???a
-
 
   const loadData = async (): Promise<void> => {
     try {

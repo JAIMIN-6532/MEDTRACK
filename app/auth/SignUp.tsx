@@ -1,7 +1,7 @@
-import { Ionicons } from '@expo/vector-icons'; // Import Ionicons from Vector Icons
+import React, { useState } from 'react';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Link, router } from 'expo-router';
-import { useState } from 'react';
 import {
     ActivityIndicator,
     Alert,

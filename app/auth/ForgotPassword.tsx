@@ -1,7 +1,7 @@
+import React, { useState } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons'; // Replace lucide-react-native with Vector Icons
-import { useState } from 'react';
 import {
     Alert,
     Image,

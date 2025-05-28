@@ -65,11 +65,13 @@ const AddMedicine: React.FC = () => {
     }
   };
 
+  // Replace the handleSubmit function in your AddMedicine component with this fixed version:
+
   const handleSubmit = async () => {
     try {
       const userDataStr = await AsyncStorage.getItem('userData');
       const userData = userDataStr ? JSON.parse(userDataStr) : null;
-      
+
       if (!userData || !userData.id) {
         console.error('❌ User data not found or invalid:', userData);
         return Alert.alert('Error', 'User not found');
@@ -97,9 +99,9 @@ const AddMedicine: React.FC = () => {
       console.log('📦 Creating health product with data:', newHealthProduct);
 
       const response = await healthProductApi.createHealthProduct(newHealthProduct);
-      const healthProductId = response?.healthProductId; 
-      console.log("HealthProduct id " , healthProductId)
-      
+      const healthProductId = response?.healthProductId;
+      console.log("HealthProduct id:", healthProductId)
+
       if (!response || !response.healthProductId) {
         console.error('❌ Invalid response from API:', response);
         return Alert.alert('Error', 'Failed to add medicine');
@@ -107,6 +109,7 @@ const AddMedicine: React.FC = () => {
 
       console.log('✅ Health product created with ID:', response.healthProductId);
 
+      // Store medicine data locally
       const localMedicine: MedicineLocalStorage = {
         id: response.healthProductId,
         userId,
@@ -119,70 +122,47 @@ const AddMedicine: React.FC = () => {
         expiryDate: response.expiryDate,
         doseTimes: response.reminderTimes,
       };
-      //check kar add karine.. ok
+
       const existingStr = await AsyncStorage.getItem('medicines');
       const existing: MedicineLocalStorage[] = existingStr ? JSON.parse(existingStr) : [];
       existing.push(localMedicine);
       await AsyncStorage.setItem('medicines', JSON.stringify(existing));
 
-      if(Platform.OS !== 'web') {
-          const notificationIds = await Promise.all(
-            localMedicine.doseTimes.map(async(t,index)=>{
-              const [hour, minute] = t.split(':');
-              console.log("inside index:",healthProductId);
-              const identifier = await Notifications.scheduleNotificationAsync({
-                //asyncstorage ma medicines (thi ) save che ne ? ? 
-                // yes
-                content: {
-                  title: `Time to take ${localMedicine.name}`,
-                  body: `Don't forget to take your ${localMedicine.doseQuantity}}`,
-                  data: { id: healthProductId, scheduleId: healthProductId },
-                  categoryIdentifier: "MEDICINE_REMINDER"
-                },
-                trigger: {
-                  hour: parseInt(hour),
-                  minute: parseInt(minute),
-                  repeats: true,
-                },
-              });
-              console.log('Notification scheduled with ID:', identifier);
-              return identifier;
-              }));
-              await AsyncStorage.setItem(
-                `notifications_${response.healthProductId}`,  
-                JSON.stringify(notificationIds)
-              );
+      // Schedule notifications only on physical devices
+      if (Platform.OS !== 'web') {
+        console.log('🔔 Scheduling notifications...');
 
-            }
-      // if (Platform.OS !== 'web') {
-      //   console.log('🔔 Scheduling notifications with:', {
-      //     healthProductId: response.healthProductId,
-      //     userId,
-      //     doseQuantity: response.doseQuantity,
-      //     unit: response.unit,
-      //     medicineName: medicineName.trim(),
-      //     reminderTimes: response.reminderTimes,
-      //   });
+        try {
+          // Make sure notification service is initialized
+          if (!notificationService.isServiceInitialized()) {
+            await notificationService.initialize();
+          }
 
-      //   const notificationIds = await notificationService.scheduleDailyReminders(
-      //     response.healthProductId,
-      //     userId,
-      //     response.doseQuantity,
-      //     response.unit,
-      //     medicineName.trim(),
-      //     response.reminderTimes
-      //   );
+          // Use the notification service instead of manual scheduling
+          const notificationIds = await notificationService.scheduleDailyReminders(
+            response.healthProductId,
+            userId,
+            response.doseQuantity,
+            response.unit,
+            medicineName.trim(),
+            response.reminderTimes
+          );
 
-      //   if (notificationIds && notificationIds.length > 0) {
-      //     await AsyncStorage.setItem(
-      //       `notifications_${response.healthProductId}`,
-      //       JSON.stringify(notificationIds)
-      //     );
-      //     console.log('✅ Notifications scheduled successfully:', notificationIds);
-      //   } else {
-      //     console.warn('⚠️ No notification IDs returned');
-      //   }
-      // }
+          if (notificationIds && notificationIds.length > 0) {
+            console.log('✅ Notifications scheduled successfully:', notificationIds);
+          } else {
+            console.warn('⚠️ No notification IDs returned');
+          }
+
+          // Test notification to verify everything is working
+          console.log('🧪 Sending test notification...');
+          await notificationService.sendTestNotification();
+
+        } catch (notificationError) {
+          console.error('❌ Error setting up notifications:', notificationError);
+          Alert.alert('Warning', 'Medicine added but notifications may not work properly');
+        }
+      }
 
       Alert.alert('Success', 'Medicine added successfully');
       router.push('/medicines' as never);
@@ -192,7 +172,6 @@ const AddMedicine: React.FC = () => {
       Alert.alert('Error', 'Failed to save medicine');
     }
   };
-
 
   return (
     <ScrollView className="flex-1 bg-white px-5">

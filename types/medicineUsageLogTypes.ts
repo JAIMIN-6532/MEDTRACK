@@ -1,3 +1,6 @@
+// Add this to your existing types file (types/medicineUsageLogTypes.ts)
+// Keep all your existing types exactly as they are:
+
 export interface LogData {
     userId: string;
     healthProductId: string;
@@ -7,6 +10,10 @@ export interface LogData {
 
 export interface NotificationData extends Omit<LogData, 'isTaken'> {
     notificationId: string;
+    // Add the missing properties here:
+    medicineName?: string;
+    doseQuantity?: number;
+    unit?: string;
 }
 
 export interface MedicineUsageSummaryDto {

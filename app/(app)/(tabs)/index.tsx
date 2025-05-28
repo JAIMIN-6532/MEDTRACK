@@ -2,7 +2,6 @@ import { healthProductApi } from '@/services/api';
 import { notificationService } from '@/services/notificationService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import * as Notifications from 'expo-notifications';
 import { Picker } from '@react-native-picker/picker';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
@@ -78,7 +77,6 @@ const AddMedicine: React.FC = () => {
       }
 
       const userId = userData.id;
-      console.log('👤 User ID:', userId);
 
       if (!medicineName.trim()) {
         return Alert.alert('Error', 'Please enter medicine name');
@@ -96,11 +94,8 @@ const AddMedicine: React.FC = () => {
         reminderTimes: doseTimes.filter(Boolean),
       };
 
-      console.log('📦 Creating health product with data:', newHealthProduct);
-
+      console.log('📦 Creating health product...');
       const response = await healthProductApi.createHealthProduct(newHealthProduct);
-      const healthProductId = response?.healthProductId;
-      console.log("HealthProduct id:", healthProductId)
 
       if (!response || !response.healthProductId) {
         console.error('❌ Invalid response from API:', response);
@@ -109,7 +104,7 @@ const AddMedicine: React.FC = () => {
 
       console.log('✅ Health product created with ID:', response.healthProductId);
 
-      // Store medicine data locally
+      // Store locally
       const localMedicine: MedicineLocalStorage = {
         id: response.healthProductId,
         userId,
@@ -128,17 +123,11 @@ const AddMedicine: React.FC = () => {
       existing.push(localMedicine);
       await AsyncStorage.setItem('medicines', JSON.stringify(existing));
 
-      // Schedule notifications only on physical devices
-      if (Platform.OS !== 'web') {
-        console.log('🔔 Scheduling notifications...');
+      // Schedule notifications using the service
+      if (Platform.OS !== 'web' && response.reminderTimes.length > 0) {
+        console.log('🔔 Setting up notifications...');
 
         try {
-          // Make sure notification service is initialized
-          if (!notificationService.isServiceInitialized()) {
-            await notificationService.initialize();
-          }
-
-          // Use the notification service instead of manual scheduling
           const notificationIds = await notificationService.scheduleDailyReminders(
             response.healthProductId,
             userId,
@@ -148,23 +137,18 @@ const AddMedicine: React.FC = () => {
             response.reminderTimes
           );
 
-          if (notificationIds && notificationIds.length > 0) {
-            console.log('✅ Notifications scheduled successfully:', notificationIds);
-          } else {
-            console.warn('⚠️ No notification IDs returned');
-          }
+          console.log(`✅ Scheduled ${notificationIds.length} notifications`);
 
-          // Test notification to verify everything is working
-          console.log('🧪 Sending test notification...');
+          // Send test notification
           await notificationService.sendTestNotification();
 
         } catch (notificationError) {
-          console.error('❌ Error setting up notifications:', notificationError);
-          Alert.alert('Warning', 'Medicine added but notifications may not work properly');
+          console.error('❌ Notification setup failed:', notificationError);
+          Alert.alert('Warning', 'Medicine added but notifications may not work');
         }
       }
 
-      Alert.alert('Success', 'Medicine added successfully');
+      Alert.alert('Success', 'Medicine added successfully!');
       router.push('/medicines' as never);
 
     } catch (error) {

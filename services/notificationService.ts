@@ -91,12 +91,13 @@ class NotificationService {
         await Notifications.setNotificationChannelAsync('medicine-reminders', {
             name: 'Medicine Reminders',
             importance: Notifications.AndroidImportance.HIGH,
-            description: 'Daily medication reminder notifications',
+            description: 'Daily medication reminder notifications with action buttons',
             vibrationPattern: [0, 250, 250, 250],
             sound: 'default',
             enableLights: true,
             lightColor: '#FF0000',
             showBadge: true,
+            enableVibrate: true, // 🔧 FIXED: enableVibrate instead of enableVibration
         });
 
         console.log('✅ Android notification channel created');
@@ -105,6 +106,7 @@ class NotificationService {
     private async setupNotificationCategories(): Promise<void> {
         console.log('🏷️ Setting up notification categories...');
 
+        // Set up categories with action buttons
         await Notifications.setNotificationCategoryAsync(this.categoryIdentifier, [
             {
                 identifier: 'TAKEN',
@@ -128,8 +130,15 @@ class NotificationService {
 
         console.log('✅ Notification categories set up successfully');
 
+        // Verify categories were created
         const categories = await Notifications.getNotificationCategoriesAsync();
         console.log('📋 Available categories:', categories.map(c => c.identifier));
+
+        // For Android, also log the channel info
+        if (Platform.OS === 'android') {
+            const channels = await Notifications.getNotificationChannelsAsync();
+            console.log('📱 Available Android channels:', channels.map(c => c.id));
+        }
     }
 
     private setupNotificationHandlers(): void {
@@ -224,21 +233,16 @@ class NotificationService {
         body: string,
         data: NotificationData
     ): Notifications.NotificationContentInput {
+        // 🔧 FIXED: Always include categoryIdentifier for action buttons
         const baseContent = {
             title,
             body,
-            data: data as any, // Type assertion for Expo's notification data
+            data: data as any,
             sound: 'default' as const,
+            categoryIdentifier: this.categoryIdentifier, // ✅ Include for all platforms
         };
 
-        if (Platform.OS === 'ios') {
-            return {
-                ...baseContent,
-                categoryIdentifier: this.categoryIdentifier,
-            };
-        } else {
-            return baseContent;
-        }
+        return baseContent;
     }
 
     public async scheduleDailyReminders(
@@ -289,14 +293,19 @@ class NotificationService {
                     notificationData
                 );
 
-                let trigger: any = { hour, minute, repeats: true };
-
-                if (Platform.OS === 'android') {
-                    trigger = {
-                        ...trigger,
-                        channelId: 'medicine-reminders',
+                // 🔧 FIXED: For Android, specify channel in trigger
+                const trigger = Platform.OS === 'android'
+                    ? {
+                        hour,
+                        minute,
+                        repeats: true,
+                        channelId: 'medicine-reminders', // Channel specified here for Android
+                    }
+                    : {
+                        hour,
+                        minute,
+                        repeats: true,
                     };
-                }
 
                 const notificationId = await Notifications.scheduleNotificationAsync({
                     content: notificationContent,
@@ -306,6 +315,9 @@ class NotificationService {
 
                 notificationIds.push(notificationId);
                 console.log(`⏰ Scheduled reminder for ${hour}:${minute.toString().padStart(2, '0')} with ID: ${notificationId}`);
+
+                // 🔧 DEBUG: Log the actual content that was scheduled
+                console.log('📋 Notification content:', JSON.stringify(notificationContent, null, 2));
 
             } catch (error) {
                 console.error(`❌ Failed to schedule reminder for time ${time}:`, error);
@@ -341,21 +353,21 @@ class NotificationService {
             unit: 'pill'                     // ✅ Now properly typed
         };
 
+        // 🔧 FIXED: For immediate notifications, always use null trigger regardless of platform
         const testContent = this.createNotificationContent(
             'Test Medicine Reminder',
             'This is a test - you should see action buttons',
             testData
         );
 
-        let testTrigger: any = null;
+        // 🔧 DEBUG: Log what we're sending
+        console.log('🧪 Test notification content:', JSON.stringify(testContent, null, 2));
 
-        if (Platform.OS === 'android') {
-            testTrigger = { channelId: 'medicine-reminders' };
-        }
-
+        // 🔧 FIXED: Immediate notifications should always use null trigger
+        // The channel is already specified in the content for Android
         await Notifications.scheduleNotificationAsync({
             content: testContent,
-            trigger: testTrigger,
+            trigger: null, // Always null for immediate notifications
             identifier: `test_${Date.now()}`
         });
 

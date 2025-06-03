@@ -2,19 +2,31 @@
 // Keep all your existing types exactly as they are:
 
 export interface LogData {
-    userId: string;
-    healthProductId: string;
+    userId: number;
+    healthProductId: number;
     isTaken: boolean;
     createdAt: string;
 }
 
-export interface NotificationData extends Omit<LogData, 'isTaken'> {
+export interface NotificationData {
+    userId: number | string;  // ✅ Allow both types for flexibility
+    healthProductId: number | string;  // ✅ Allow both types for flexibility
+    createdAt: string;
     notificationId: string;
     // Add the missing properties here:
     medicineName?: string;
     doseQuantity?: number;
     unit?: string;
 }
+
+
+// export interface NotificationData extends Omit<LogData, 'isTaken'> {
+//     notificationId: string;
+//     // Add the missing properties here:
+//     medicineName?: string;
+//     doseQuantity?: number;
+//     unit?: string;
+// }
 
 export interface MedicineUsageSummaryDto {
     healthProductId: string;

@@ -139,9 +139,6 @@ const AddMedicine: React.FC = () => {
 
           console.log(`✅ Scheduled ${notificationIds.length} notifications`);
 
-          // Send test notification
-          await notificationService.sendTestNotification();
-
         } catch (notificationError) {
           console.error('❌ Notification setup failed:', notificationError);
           Alert.alert('Warning', 'Medicine added but notifications may not work');

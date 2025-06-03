@@ -1,3 +1,5 @@
+// Improved services/healthProductApi.ts
+
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
     HealthProductRequestDto,
@@ -53,12 +55,18 @@ export const getHealthProductById = async (id: string): Promise<HealthProductRes
     }
 };
 
-// Helper to get user ID from AsyncStorage
-const getUserId = async (): Promise<string> => {
+// Helper to get user ID from AsyncStorage with proper type conversion
+const getUserId = async (): Promise<number> => {
     const userData = await AsyncStorage.getItem('userData');
     const parsed = JSON.parse(userData || '{}');
+
     if (!parsed.id) throw new Error('User not found in storage');
-    return parsed.id;
+
+    // ✅ Convert to number if it's a string
+    const userId = typeof parsed.id === 'string' ? parseInt(parsed.id, 10) : parsed.id;
+    if (isNaN(userId)) throw new Error('Invalid user ID format');
+
+    return userId;
 };
 
 // Get active
@@ -97,11 +105,37 @@ export const getLowStockHealthProducts = async (): Promise<HealthProductResponse
     }
 };
 
-// Record usage
+// ✅ Improved record usage with better error handling
 export const recordMedicineUsage = async (id: string): Promise<void> => {
     try {
-        await api.post(`/health-product/${id}/record-usage`);
-    } catch (error) {
+        console.log(`📦 Recording medicine usage for health product ID: ${id}`);
+
+        // ✅ Ensure ID is properly formatted
+        const healthProductId = typeof id === 'string' ? parseInt(id, 10) : id;
+        if (isNaN(healthProductId)) {
+            throw new Error('Invalid health product ID format');
+        }
+
+        const response = await api.post(`/health-product/${healthProductId}/record-usage`);
+        console.log('✅ Medicine usage recorded successfully:', response.status);
+
+    } catch (error: any) {
+        console.error('❌ Failed to record medicine usage:', error);
+
+        // ✅ Improve error handling with specific error types
+        if (error?.response?.data?.errors?.error) {
+            const errorMessage = error.response.data.errors.error;
+
+            if (errorMessage.includes('Insufficient quantity')) {
+                throw new Error('Insufficient quantity available for dose');
+            } else if (errorMessage.includes('not found')) {
+                throw new Error('Medicine not found');
+            } else {
+                throw new Error(errorMessage);
+            }
+        }
+
         handleApiError(error);
+        throw error;
     }
 };

@@ -1,12 +1,12 @@
-// Updated notification service using the extended NotificationData type
+// Complete Fixed services/notificationService.ts
 
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform } from 'react-native';
+import { Platform, Alert } from 'react-native';
 
 import { medicineLogApi, healthProductApi } from './api';
-import { LogData, NotificationData } from '../types/medicineUsageLogTypes'; // Now includes all needed properties
+import { LogData, NotificationData } from '../types/medicineUsageLogTypes';
 
 class NotificationService {
     private static instance: NotificationService;
@@ -91,13 +91,12 @@ class NotificationService {
         await Notifications.setNotificationChannelAsync('medicine-reminders', {
             name: 'Medicine Reminders',
             importance: Notifications.AndroidImportance.HIGH,
-            description: 'Daily medication reminder notifications with action buttons',
+            description: 'Daily medication reminder notifications',
             vibrationPattern: [0, 250, 250, 250],
             sound: 'default',
             enableLights: true,
             lightColor: '#FF0000',
             showBadge: true,
-            enableVibrate: true, // 🔧 FIXED: enableVibrate instead of enableVibration
         });
 
         console.log('✅ Android notification channel created');
@@ -106,7 +105,6 @@ class NotificationService {
     private async setupNotificationCategories(): Promise<void> {
         console.log('🏷️ Setting up notification categories...');
 
-        // Set up categories with action buttons
         await Notifications.setNotificationCategoryAsync(this.categoryIdentifier, [
             {
                 identifier: 'TAKEN',
@@ -129,16 +127,6 @@ class NotificationService {
         ]);
 
         console.log('✅ Notification categories set up successfully');
-
-        // Verify categories were created
-        const categories = await Notifications.getNotificationCategoriesAsync();
-        console.log('📋 Available categories:', categories.map(c => c.identifier));
-
-        // For Android, also log the channel info
-        if (Platform.OS === 'android') {
-            const channels = await Notifications.getNotificationChannelsAsync();
-            console.log('📱 Available Android channels:', channels.map(c => c.id));
-        }
     }
 
     private setupNotificationHandlers(): void {
@@ -160,7 +148,7 @@ class NotificationService {
             console.log('🔔 Notification response received:', JSON.stringify(response, null, 2));
 
             const { actionIdentifier, notification } = response;
-            const data = notification.request.content.data as NotificationData; // ✅ Now properly typed
+            const data = notification.request.content.data as NotificationData;
             const notificationId = notification.request.identifier;
 
             if (this.processingNotificationIds.has(notificationId)) {
@@ -178,15 +166,24 @@ class NotificationService {
                     return;
                 }
 
+                // ✅ Skip test notifications (no longer needed in production)
+                if (data.userId === 'test-user' || data.healthProductId === 'test-medicine') {
+                    console.log('ℹ️ Skipping test notification - not logging to backend');
+                    Alert.alert('Test Notification', `Test notification "${actionIdentifier}" processed successfully!`);
+                    return;
+                }
+
                 console.log('🎯 Processing action:', actionIdentifier);
 
                 switch (actionIdentifier) {
                     case 'TAKEN':
                         await this.logMedicineUsage(data, true);
+                        Alert.alert('Success', `Medicine "${data.medicineName || 'Unknown'}" marked as taken!`);
                         console.log('✅ Medicine marked as TAKEN');
                         break;
                     case 'MISSED':
                         await this.logMedicineUsage(data, false);
+                        Alert.alert('Noted', `Medicine "${data.medicineName || 'Unknown'}" marked as missed.`);
                         console.log('✅ Medicine marked as MISSED');
                         break;
                     case Notifications.DEFAULT_ACTION_IDENTIFIER:
@@ -202,28 +199,81 @@ class NotificationService {
 
         } catch (error) {
             console.error('❌ Error handling notification response:', error);
+            Alert.alert('Error', 'Failed to process notification. Please try again.');
         }
     };
+
+    // ✅ Helper function to safely convert IDs to numbers
+    private safeParseId(id: string | number): number {
+        if (typeof id === 'number') return id;
+        const parsed = parseInt(String(id), 10);
+        if (isNaN(parsed)) {
+            throw new Error(`Invalid ID: ${id}`);
+        }
+        return parsed;
+    }
 
     private async logMedicineUsage(data: NotificationData, isTaken: boolean): Promise<void> {
         try {
             console.log(`📝 Logging medicine usage: ${isTaken ? 'TAKEN' : 'MISSED'}`);
 
-            await medicineLogApi.addMedicineUsageLog({
-                userId: data.userId,
-                healthProductId: data.healthProductId,
+            // ✅ FIX 2: Safely convert IDs to numbers for backend compatibility
+            const userId = this.safeParseId(data.userId);
+            const healthProductId = this.safeParseId(data.healthProductId);
+
+            const logData: LogData = {
+                userId,
+                healthProductId,
                 isTaken,
                 createdAt: new Date().toISOString(),
-            });
+            };
 
-            if (isTaken) {
-                await healthProductApi.recordMedicineUsage(data.healthProductId);
-            }
+            console.log('📝 Sending log data:', logData);
 
+            // Log the medicine usage first (this should always work)
+            await medicineLogApi.addMedicineUsageLog(logData);
             console.log('✅ Medicine usage logged successfully');
 
-        } catch (error) {
+            // ✅ FIX 3: Only record usage (decrease stock) if medicine was actually taken
+            // AND handle the "insufficient quantity" error gracefully
+            if (isTaken) {
+                try {
+                    await healthProductApi.recordMedicineUsage(healthProductId.toString());
+                    console.log('✅ Medicine stock updated successfully');
+                } catch (stockError: any) {
+                    console.warn('⚠️ Stock update failed:', stockError.message);
+
+                    // Show user-friendly message for stock issues
+                    if (stockError.message?.includes('Insufficient quantity')) {
+                        Alert.alert(
+                            'Low Stock Warning',
+                            `Your ${data.medicineName || 'medicine'} is running low! Please reorder soon.`,
+                            [{ text: 'OK' }]
+                        );
+                    } else {
+                        // For other stock-related errors, still show a warning but don't fail completely
+                        Alert.alert(
+                            'Warning',
+                            'Medicine usage recorded, but stock update failed. Please check your inventory.',
+                            [{ text: 'OK' }]
+                        );
+                    }
+                    // Don't re-throw the error here - we want to continue processing
+                }
+            }
+
+        } catch (error: any) {
             console.error('❌ Failed to log medicine usage:', error);
+
+            // Show user-friendly error message
+            const errorMessage = error.message || 'Unknown error occurred';
+            Alert.alert(
+                'Error',
+                `Failed to record medicine usage: ${errorMessage}`,
+                [{ text: 'OK' }]
+            );
+            // Re-throw for the main handler to catch
+            throw error;
         }
     }
 
@@ -233,16 +283,24 @@ class NotificationService {
         body: string,
         data: NotificationData
     ): Notifications.NotificationContentInput {
-        // 🔧 FIXED: Always include categoryIdentifier for action buttons
         const baseContent = {
             title,
             body,
             data: data as any,
             sound: 'default' as const,
-            categoryIdentifier: this.categoryIdentifier, // ✅ Include for all platforms
         };
 
-        return baseContent;
+        if (Platform.OS === 'ios') {
+            return {
+                ...baseContent,
+                categoryIdentifier: this.categoryIdentifier,
+            };
+        } else {
+            return {
+                ...baseContent,
+                categoryIdentifier: this.categoryIdentifier, // ✅ Also add for Android
+            };
+        }
     }
 
     public async scheduleDailyReminders(
@@ -262,6 +320,10 @@ class NotificationService {
 
         const notificationIds: string[] = [];
 
+        // ✅ Convert IDs to numbers once at the beginning
+        const userIdNum = this.safeParseId(userId);
+        const healthProductIdNum = this.safeParseId(healthProductId);
+
         for (let i = 0; i < scheduleTimes.length; i++) {
             const time = scheduleTimes[i];
             if (!time) continue;
@@ -276,15 +338,15 @@ class NotificationService {
 
                 const uniqueId = `med_${healthProductId}_${hour}_${minute}_${i}`;
 
-                // ✅ Now properly typed with all required and optional properties
+                // ✅ FIX 4: Use consistent numeric data types
                 const notificationData: NotificationData = {
-                    userId,
-                    healthProductId,
+                    userId: userIdNum,
+                    healthProductId: healthProductIdNum,
                     createdAt: new Date().toISOString(),
                     notificationId: uniqueId,
-                    medicineName,      // ✅ Now properly typed
-                    doseQuantity,      // ✅ Now properly typed
-                    unit              // ✅ Now properly typed
+                    medicineName,
+                    doseQuantity,
+                    unit
                 };
 
                 const notificationContent = this.createNotificationContent(
@@ -293,19 +355,20 @@ class NotificationService {
                     notificationData
                 );
 
-                // 🔧 FIXED: For Android, specify channel in trigger
-                const trigger = Platform.OS === 'android'
-                    ? {
-                        hour,
-                        minute,
-                        repeats: true,
-                        channelId: 'medicine-reminders', // Channel specified here for Android
-                    }
-                    : {
-                        hour,
-                        minute,
-                        repeats: true,
-                    };
+                // ✅ FIX: Proper trigger setup for both platforms
+                let trigger: Notifications.DailyTriggerInput = {
+                    hour,
+                    minute,
+                    repeats: true,
+                };
+
+                // Add channel info for Android
+                if (Platform.OS === 'android') {
+                    trigger = {
+                        ...trigger,
+                        channelId: 'medicine-reminders',
+                    } as any;
+                }
 
                 const notificationId = await Notifications.scheduleNotificationAsync({
                     content: notificationContent,
@@ -315,9 +378,6 @@ class NotificationService {
 
                 notificationIds.push(notificationId);
                 console.log(`⏰ Scheduled reminder for ${hour}:${minute.toString().padStart(2, '0')} with ID: ${notificationId}`);
-
-                // 🔧 DEBUG: Log the actual content that was scheduled
-                console.log('📋 Notification content:', JSON.stringify(notificationContent, null, 2));
 
             } catch (error) {
                 console.error(`❌ Failed to schedule reminder for time ${time}:`, error);
@@ -335,44 +395,7 @@ class NotificationService {
         return notificationIds;
     }
 
-    public async sendTestNotification(): Promise<void> {
-        console.log('🧪 Sending test notification...');
-
-        if (!this.isInitialized) {
-            await this.initialize();
-        }
-
-        // ✅ Now properly typed test data
-        const testData: NotificationData = {
-            userId: 'test-user',
-            healthProductId: 'test-medicine',
-            createdAt: new Date().toISOString(),
-            notificationId: `test_${Date.now()}`,
-            medicineName: 'Test Medicine',    // ✅ Now properly typed
-            doseQuantity: 1,                  // ✅ Now properly typed
-            unit: 'pill'                     // ✅ Now properly typed
-        };
-
-        // 🔧 FIXED: For immediate notifications, always use null trigger regardless of platform
-        const testContent = this.createNotificationContent(
-            'Test Medicine Reminder',
-            'This is a test - you should see action buttons',
-            testData
-        );
-
-        // 🔧 DEBUG: Log what we're sending
-        console.log('🧪 Test notification content:', JSON.stringify(testContent, null, 2));
-
-        // 🔧 FIXED: Immediate notifications should always use null trigger
-        // The channel is already specified in the content for Android
-        await Notifications.scheduleNotificationAsync({
-            content: testContent,
-            trigger: null, // Always null for immediate notifications
-            identifier: `test_${Date.now()}`
-        });
-
-        console.log('✅ Test notification sent - check your notification panel!');
-    }
+    // Test notification method removed - no longer needed for production
 
     public async listScheduledNotifications(): Promise<void> {
         const notifications = await Notifications.getAllScheduledNotificationsAsync();

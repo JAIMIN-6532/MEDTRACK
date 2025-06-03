@@ -48,20 +48,44 @@ const MedicinesList: React.FC = () => {
         return;
       }
 
-      const [daily, stock, weekly, low] = await Promise.all([
-        medicineLogApi.getTodayLogs(),
-        healthProductApi.getAllHealthProducts(),
-        medicineLogApi.getLogsForPastDays(7),
-        healthProductApi.getLowStockHealthProducts(),
-      ]);
+      // Handle each API call separately to isolate the error
+      let daily: MedicineUsageSummaryDto[] = [];
+      let stock: HealthProductResponseDto[] = [];
+      let weekly: MedicineUsageSummaryDto[] = [];
+      let low: HealthProductResponseDto[] = [];
 
-      setDailyUsage(daily ?? []);
-      setStockProducts(stock ?? []);
-      setWeeklyUsage(weekly ?? []);
-      setLowStockProducts(low ?? []);
+      try {
+        daily = await medicineLogApi.getTodayLogs() ?? [];
+      } catch (error) {
+        console.error('❌ Failed to load today logs:', error);
+        // Continue with empty array
+      }
+
+      try {
+        stock = await healthProductApi.getAllHealthProducts() ?? [];
+      } catch (error) {
+        console.error('❌ Failed to load health products:', error);
+      }
+
+      try {
+        weekly = await medicineLogApi.getLogsForPastDays(7) ?? [];
+      } catch (error) {
+        console.error('❌ Failed to load weekly logs:', error);
+      }
+
+      try {
+        low = await healthProductApi.getLowStockHealthProducts() ?? [];
+      } catch (error) {
+        console.error('❌ Failed to load low stock:', error);
+      }
+
+      setDailyUsage(daily);
+      setStockProducts(stock);
+      setWeeklyUsage(weekly);
+      setLowStockProducts(low);
     } catch (e) {
       console.error('Load data error:', e);
-      Alert.alert('Error', 'Failed to load data.');
+      Alert.alert('Error', 'Failed to load some data.');
     } finally {
       setLoading(false);
     }

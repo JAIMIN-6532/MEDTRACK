@@ -2,7 +2,7 @@
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.69.119:8888/api/v1';
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.203.119:8888/api/v1';
 console.log('API URL:', API_URL);
 
 const api = axios.create({

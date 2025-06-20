@@ -41,6 +41,7 @@ module.exports = {
       fontFamily: {
         sans: ['System'],
         heading: ['System-Bold'],
+        mono: ['monospace'],
       },
     },
   },

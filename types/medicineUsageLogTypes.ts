@@ -20,17 +20,9 @@ export interface NotificationData {
 }
 
 
-// export interface NotificationData extends Omit<LogData, 'isTaken'> {
-//     notificationId: string;
-//     // Add the missing properties here:
-//     medicineName?: string;
-//     doseQuantity?: number;
-//     unit?: string;
-// }
-
 export interface MedicineUsageSummaryDto {
-    healthProductId: string;
-    healthProductName: string;
+    healthProductId: number; // Backend uses this name
+    healthProductName: string; // Backend uses this name  
     takenCount: number;
     missedCount: number;
 }

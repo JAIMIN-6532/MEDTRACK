@@ -304,8 +304,8 @@ class NotificationService {
     }
 
     public async scheduleDailyReminders(
-        healthProductId: string,
-        userId: string,
+        healthProductId: string | number, // Accept both types
+        userId: string | number, // Accept both types
         doseQuantity: number,
         unit: string,
         medicineName: string,
@@ -320,9 +320,13 @@ class NotificationService {
 
         const notificationIds: string[] = [];
 
-        // ✅ Convert IDs to numbers once at the beginning
-        const userIdNum = this.safeParseId(userId);
-        const healthProductIdNum = this.safeParseId(healthProductId);
+        // ✅ FIX: Convert IDs to numbers consistently
+        const userIdNum = typeof userId === 'string' ? parseInt(userId, 10) : userId;
+        const healthProductIdNum = typeof healthProductId === 'string' ? parseInt(healthProductId, 10) : healthProductId;
+
+        if (isNaN(userIdNum) || isNaN(healthProductIdNum)) {
+            throw new Error('Invalid user ID or health product ID');
+        }
 
         for (let i = 0; i < scheduleTimes.length; i++) {
             const time = scheduleTimes[i];
@@ -336,9 +340,9 @@ class NotificationService {
                     continue;
                 }
 
-                const uniqueId = `med_${healthProductId}_${hour}_${minute}_${i}`;
+                // ✅ FIX: Use consistent ID format
+                const uniqueId = `med_${healthProductIdNum}_${hour}_${minute}_${i}`;
 
-                // ✅ FIX 4: Use consistent numeric data types
                 const notificationData: NotificationData = {
                     userId: userIdNum,
                     healthProductId: healthProductIdNum,
@@ -355,14 +359,13 @@ class NotificationService {
                     notificationData
                 );
 
-                // ✅ FIX: Proper trigger setup for both platforms
+                // Rest of the scheduling logic...
                 let trigger: Notifications.DailyTriggerInput = {
                     hour,
                     minute,
                     repeats: true,
                 };
 
-                // Add channel info for Android
                 if (Platform.OS === 'android') {
                     trigger = {
                         ...trigger,
@@ -386,7 +389,7 @@ class NotificationService {
 
         if (notificationIds.length > 0) {
             await AsyncStorage.setItem(
-                `notifications_${healthProductId}`,
+                `notifications_${healthProductIdNum}`,
                 JSON.stringify(notificationIds)
             );
         }

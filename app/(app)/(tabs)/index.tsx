@@ -15,7 +15,7 @@ import {
   View,
 } from 'react-native';
 
-import { HealthProductRequestDto } from '@/types/healthProductTypes';
+import { CreateHealthProductRequest, HealthProductRequestDto } from '@/types/healthProductTypes';
 
 interface MedicineLocalStorage {
   id: string;
@@ -64,50 +64,75 @@ const AddMedicine: React.FC = () => {
     }
   };
 
-  // Replace the handleSubmit function in your AddMedicine component with this fixed version:
-
   const handleSubmit = async () => {
     try {
       const userDataStr = await AsyncStorage.getItem('userData');
       const userData = userDataStr ? JSON.parse(userDataStr) : null;
 
-      if (!userData || !userData.id) {
+      if (!userData || (!userData.id && !userData.userId)) {
         console.error('❌ User data not found or invalid:', userData);
         return Alert.alert('Error', 'User not found');
       }
 
-      const userId = userData.id;
+      // ✅ FIX: Handle both id and userId fields for backward compatibility
+      const userId = userData.userId || userData.id;
+      const numericUserId = typeof userId === 'string' ? parseInt(userId, 10) : userId;
+
+      if (isNaN(numericUserId)) {
+        console.error('❌ Invalid user ID:', userId);
+        return Alert.alert('Error', 'Invalid user session');
+      }
 
       if (!medicineName.trim()) {
         return Alert.alert('Error', 'Please enter medicine name');
       }
 
-      const newHealthProduct: HealthProductRequestDto = {
-        userId,
+      // ✅ FIX: Validate required fields
+      if (!totalQuantity || isNaN(parseFloat(totalQuantity))) {
+        return Alert.alert('Error', 'Please enter valid total quantity');
+      }
+
+      if (!thresholdQuantity || isNaN(parseFloat(thresholdQuantity))) {
+        return Alert.alert('Error', 'Please enter valid threshold quantity');
+      }
+
+      if (!doseQuantity || isNaN(parseFloat(doseQuantity))) {
+        return Alert.alert('Error', 'Please enter valid dose quantity');
+      }
+
+      if (!unit) {
+        return Alert.alert('Error', 'Please select a unit');
+      }
+
+      if (doseTimes.filter(time => time.trim()).length === 0) {
+        return Alert.alert('Error', 'Please add at least one reminder time');
+      }
+
+      // ✅ FIX: Use the correct request format expected by backend
+      const newHealthProduct: CreateHealthProductRequest = {
         healthProductName: medicineName.trim(),
         totalQuantity: parseFloat(totalQuantity),
-        availableQuantity: parseFloat(totalQuantity),
         thresholdQuantity: parseFloat(thresholdQuantity),
         doseQuantity: parseFloat(doseQuantity),
-        unit,
+        unit: unit as 'mg' | 'ml' | 'pills' | 'drops',
         expiryDate: expiryDate.toISOString().split('T')[0],
-        reminderTimes: doseTimes.filter(Boolean),
+        reminderTimes: doseTimes.filter(time => time.trim()), // Remove empty times
       };
 
-      console.log('📦 Creating health product...');
+      console.log('📦 Creating health product with data:', newHealthProduct);
       const response = await healthProductApi.createHealthProduct(newHealthProduct);
 
       if (!response || !response.healthProductId) {
         console.error('❌ Invalid response from API:', response);
-        return Alert.alert('Error', 'Failed to add medicine');
+        return Alert.alert('Error', 'Failed to add medicine - invalid server response');
       }
 
       console.log('✅ Health product created with ID:', response.healthProductId);
 
-      // Store locally
+      // ✅ FIX: Store locally with proper ID handling
       const localMedicine: MedicineLocalStorage = {
-        id: response.healthProductId,
-        userId,
+        id: response.healthProductId.toString(), // Convert to string for local storage
+        userId: numericUserId.toString(),
         name: response.healthProductName,
         totalQuantity: response.totalQuantity,
         availableQuantity: response.availableQuantity,
@@ -123,14 +148,14 @@ const AddMedicine: React.FC = () => {
       existing.push(localMedicine);
       await AsyncStorage.setItem('medicines', JSON.stringify(existing));
 
-      // Schedule notifications using the service
+      // ✅ FIX: Schedule notifications with proper ID conversion
       if (Platform.OS !== 'web' && response.reminderTimes.length > 0) {
         console.log('🔔 Setting up notifications...');
 
         try {
           const notificationIds = await notificationService.scheduleDailyReminders(
-            response.healthProductId,
-            userId,
+            response.healthProductId, // Pass as number
+            numericUserId, // Pass as number
             response.doseQuantity,
             response.unit,
             medicineName.trim(),
@@ -141,16 +166,45 @@ const AddMedicine: React.FC = () => {
 
         } catch (notificationError) {
           console.error('❌ Notification setup failed:', notificationError);
-          Alert.alert('Warning', 'Medicine added but notifications may not work');
+          Alert.alert('Warning', 'Medicine added but notifications may not work. Please check your notification permissions.');
         }
       }
 
-      Alert.alert('Success', 'Medicine added successfully!');
-      router.push('/medicines' as never);
+      Alert.alert('Success', 'Medicine added successfully!', [
+        {
+          text: 'OK', onPress: () => {
+            // Reset form
+            setMedicineName('');
+            setTotalQuantity('');
+            setThresholdQuantity('');
+            setDoseQuantity('');
+            setUnit('mg');
+            setExpiryDate(new Date());
+            setDoseTimes(['']);
 
-    } catch (error) {
+            // Navigate back to medicines list
+            router.push('/medicines' as never);
+          }
+        }
+      ]);
+
+    } catch (error: any) {
       console.error('❌ Error saving medicine:', error);
-      Alert.alert('Error', 'Failed to save medicine');
+
+      // ✅ FIX: Better error handling with specific messages
+      let errorMessage = 'Failed to save medicine';
+
+      if (error.message?.includes('User not found')) {
+        errorMessage = 'Please log in again';
+      } else if (error.message?.includes('already exists')) {
+        errorMessage = 'A medicine with this name already exists';
+      } else if (error.message?.includes('validation')) {
+        errorMessage = 'Please check your input data';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
+      Alert.alert('Error', errorMessage);
     }
   };
 

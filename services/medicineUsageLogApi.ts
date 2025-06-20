@@ -12,16 +12,38 @@ export const getLogsForPastDays = async (days: number): Promise<MedicineLogRespo
         if (!userData) throw new Error('User data not found');
 
         const { id } = JSON.parse(userData);
-
-        // ✅ Ensure ID is a number
         const userId = typeof id === 'string' ? parseInt(id, 10) : id;
         if (isNaN(userId)) throw new Error('Invalid user ID');
 
-        const res = await api.get<MedicineLogResponse>(`/medicine-logs/${userId}/time/${days}`);
-        return res.data;
+        console.log(`📊 Fetching ${days} days of logs for user:`, userId);
+        const response = await api.get<MedicineLogResponse>(`/medicine-logs/${userId}/time/${days}`);
+
+        const data = response.data;
+
+        if (!Array.isArray(data)) {
+            console.warn(`⚠️ Backend returned non-array data for ${days} days logs:`, data);
+            return [];
+        }
+
+        const validatedData = data.map(item => ({
+            healthProductId: item.healthProductId || 0,
+            healthProductName: item.healthProductName || 'Unknown Medicine',
+            takenCount: item.takenCount || 0,
+            missedCount: item.missedCount || 0,
+        }));
+
+        console.log(`✅ ${days} days logs fetched successfully:`, validatedData.length);
+        return validatedData;
     } catch (error: any) {
+        console.error(`❌ Error fetching ${days} days logs:`, error);
+
+        if (error?.response?.status === 404) {
+            console.log(`ℹ️ No logs found for ${days} days, returning empty array`);
+            return [];
+        }
+
         handleApiError(error);
-        throw error?.response?.data || error.message || 'An error occurred while fetching logs';
+        throw error?.response?.data || error.message || `An error occurred while fetching ${days} days logs`;
     }
 };
 
@@ -61,6 +83,7 @@ export const addMedicineUsageLog = async (logData: LogData): Promise<boolean> =>
 };
 
 // Fetch today's medicine usage logs
+// Update getTodayLogs method to handle backend response properly:
 export const getTodayLogs = async (): Promise<MedicineLogResponse> => {
     try {
         const userData = await AsyncStorage.getItem('userData');
@@ -72,9 +95,36 @@ export const getTodayLogs = async (): Promise<MedicineLogResponse> => {
         const userId = typeof id === 'string' ? parseInt(id, 10) : id;
         if (isNaN(userId)) throw new Error('Invalid user ID');
 
-        const res = await api.get<MedicineLogResponse>(`/medicine-logs/${userId}/today`);
-        return res.data;
+        console.log('📊 Fetching today\'s logs for user:', userId);
+        const response = await api.get<MedicineLogResponse>(`/medicine-logs/${userId}/today`);
+
+        // ✅ FIX: Handle case where backend returns empty or different format
+        const data = response.data;
+
+        // Ensure data is array and has proper structure
+        if (!Array.isArray(data)) {
+            console.warn('⚠️ Backend returned non-array data for today logs:', data);
+            return [];
+        }
+
+        // ✅ FIX: Validate and transform data structure if needed
+        const validatedData = data.map(item => ({
+            healthProductId: item.healthProductId || 0,
+            healthProductName: item.healthProductName || 'Unknown Medicine',
+            takenCount: item.takenCount || 0,
+            missedCount: item.missedCount || 0,
+        }));
+
+        console.log('✅ Today logs fetched successfully:', validatedData.length);
+        return validatedData;
     } catch (error: any) {
+        console.error('❌ Error fetching today\'s logs:', error);
+
+        if (error?.response?.status === 404) {
+            console.log('ℹ️ No logs found for today, returning empty array');
+            return [];
+        }
+
         handleApiError(error);
         throw error?.response?.data || error.message || 'An error occurred while fetching today\'s logs';
     }
